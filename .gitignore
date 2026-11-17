@@ -1,4 +1,6 @@
 /*.sh
+!/run_bevfusion_inference.sh
+/outputs/
 change_submit.py
 cluster_submit.yaml
 
