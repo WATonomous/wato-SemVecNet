@@ -1,0 +1,33 @@
+{
+  // This is ONLY for debugging with breakpoints (F5). To just run the program, use the task
+  // "semvecnet: run (docker)" (Terminal > Run Task, or the keyboard shortcut in the README).
+  // F5 does not rebuild: press Ctrl+Shift+B first after changing code.
+  // gdb runs inside the semvecnet:dev image via tool/docker_run.sh; the repo is mounted at the
+  // same path as on the host, so source paths line up with no mapping.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "semvecnet (debugger)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/CUDA-SemVecNet/build/semvecnet",
+      // Add arguments here, e.g. ["model/semvecnet.plan", "path/to/seg_map.png"] (relative to cwd)
+      "args": [],
+      "cwd": "${workspaceFolder}/CUDA-SemVecNet",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "pipeTransport": {
+        "pipeCwd": "${workspaceFolder}/CUDA-SemVecNet",
+        "pipeProgram": "${workspaceFolder}/CUDA-SemVecNet/tool/docker_run.sh",
+        "pipeArgs": ["sh", "-c"],
+        "pipeEnv": { "SEMVECNET_QUIET": "1" },
+        "debuggerPath": "/usr/bin/gdb"
+      },
+      // Hide the "Loaded '/lib/...' Symbols loaded" and thread start/exit noise.
+      "logging": { "moduleLoad": false, "threadExit": false, "programOutput": true, "engineLogging": false },
+      "setupCommands": [
+        { "description": "Pretty-print STL containers", "text": "-enable-pretty-printing", "ignoreFailures": true }
+      ]
+    }
+  ]
+}

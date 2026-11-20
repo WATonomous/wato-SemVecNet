@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "semvecnet: build (docker)",
+      "type": "shell",
+      "command": "tool/build.sh",
+      "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "semvecnet: run (docker)",
+      "type": "shell",
+      "command": "SEMVECNET_QUIET=1 tool/docker_run.sh build/semvecnet",
+      "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true, "focus": false },
+      "problemMatcher": []
+    },
+    {
+      "label": "semvecnet: shell (docker)",
+      "type": "shell",
+      "command": "tool/docker_run.sh",
+      "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "problemMatcher": []
+    },
+    {
+      "label": "semvecnet: sync IntelliSense headers",
+      "type": "shell",
+      "command": "tool/sync_headers.sh",
+      "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "problemMatcher": []
+    },
+    {
+      "label": "semvecnet: build TensorRT engine (docker)",
+      "type": "shell",
+      "command": "tool/docker_run.sh tool/build_trt_engine.sh ${input:onnxPath}",
+      "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    { "id": "onnxPath", "type": "promptString", "description": "Path to the exported ONNX file (relative to CUDA-SemVecNet/)" }
+  ]
+}

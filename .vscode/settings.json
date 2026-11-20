@@ -1,0 +1,16 @@
+{
+  "cmake.sourceDirectory": "${workspaceFolder}/CUDA-SemVecNet",
+  "cmake.buildDirectory": "${workspaceFolder}/CUDA-SemVecNet/build",
+  "cmake.generator": "Ninja",
+  "cmake.configureOnOpen": false,
+  "C_Cpp.default.configurationProvider": "",
+  "C_Cpp.default.cppStandard": "c++17",
+  "files.associations": {
+    "*.cu": "cuda-cpp",
+    "*.cuh": "cuda-cpp",
+    "*.hpp": "cpp"
+  },
+  "files.watcherExclude": {
+    "**/CUDA-SemVecNet/build/**": true
+  }
+}
