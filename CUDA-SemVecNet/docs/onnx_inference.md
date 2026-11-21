@@ -14,6 +14,30 @@ For OCRNet, resize RGB to width 960, height 720. Divide by 255, then subtract
 intrinsics to the mask resolution, or resize the mask back with nearest
 neighbor before projection.
 
+### C++ input from the lanelet node
+
+`semvecnet::forward()` accepts the host buffers used by the BEVFusion wrapper:
+one pointer per decoded, contiguous RGB8 image in configured camera order, and
+five FP16 values (`x, y, z, intensity, time_lag`) per LiDAR point. Pass the actual
+shared image width and height, before any BEVFusion network crop. For example:
+
+```cpp
+auto prepared = semvecnet::forward(camera_images.data(), lidar_fp16, num_points,
+                                   8, image_width, image_height);
+```
+
+Run HRNet once for each `prepared.hrnet_images[i]`, binding it as FP32
+`[1, 3, 720, 960]`. `prepared.lidar_points` holds decoded FP32 points for
+projection after inference; LiDAR is not an HRNet input. This call only prepares
+the buffers on the CPU, using OpenCV `INTER_AREA` on RGB8 before FP32
+normalization and HWC-to-CHW conversion, like the Python reference. The build
+requires OpenCV `core` and `imgproc` (`libopencv-dev` on Ubuntu). If you already
+have a `semvecnet:dev` image, rebuild it to pick up OpenCV. The ROS wrapper still
+owns camera ordering, synchronization, and calibration; it does not pass a CUDA
+stream.
+
+### SemVecNet encoder
+
 For SemVecNet, render an ego-centric RGB semantic map, not a camera image or a
 class-ID tensor. Match the nuScenes grid: 0.2 m/pixel, 60 m forward/back span
 and 30 m lateral span. Use the palette and orientation in

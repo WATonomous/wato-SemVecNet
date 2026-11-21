@@ -1,10 +1,11 @@
 #!/bin/bash
-# Copy the CUDA + TensorRT headers out of the semvecnet:dev image into .sysroot/ (git-ignored),
+# Copy CUDA, TensorRT and OpenCV headers into .sysroot/ (git-ignored),
 # so host VS Code IntelliSense sees exactly the versions the container compiles against.
-# Re-run after changing CUDA/TensorRT versions in the Dockerfile.
+# Re-run after changing SDK versions in the Dockerfile.
 set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="${SEMVECNET_IMAGE:-semvecnet:dev}"
+OPENCV_IMAGE="${SEMVECNET_OPENCV_IMAGE:-$IMAGE}"
 SYSROOT="$PROJECT_DIR/.sysroot"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
@@ -12,9 +13,15 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! docker run --rm --entrypoint test "$OPENCV_IMAGE" -f /usr/include/opencv4/opencv2/core.hpp; then
+  echo "OpenCV development headers not found in $OPENCV_IMAGE." >&2
+  echo "Rebuild the dev image with libopencv-dev, or set SEMVECNET_OPENCV_IMAGE to a local image that has it." >&2
+  exit 1
+fi
+
 rm -rf "$SYSROOT"
 # bin/ is empty, but clang/clangd need it to recognise .sysroot/cuda as a CUDA install.
-mkdir -p "$SYSROOT/cuda/bin" "$SYSROOT/tensorrt/include"
+mkdir -p "$SYSROOT/cuda/bin" "$SYSROOT/tensorrt/include" "$SYSROOT/opencv/include"
 
 # --entrypoint bypasses NVIDIA's entrypoint, which prints a banner to stdout and corrupts the tar stream.
 # /usr/local/cuda/include is a symlink chain; -h dereferences it.
@@ -22,6 +29,8 @@ docker run --rm --entrypoint tar "$IMAGE" -C /usr/local/cuda -chf - include \
   | tar -C "$SYSROOT/cuda" -xf -
 docker run --rm --entrypoint sh "$IMAGE" -c 'cd /usr/include/x86_64-linux-gnu && tar -chf - Nv*.h' \
   | tar -C "$SYSROOT/tensorrt/include" -xf -
+docker run --rm --entrypoint tar "$OPENCV_IMAGE" -C /usr/include/opencv4 -chf - opencv2 \
+  | tar -C "$SYSROOT/opencv/include" -xf -
 
 echo "Headers synced to $SYSROOT"
 ls "$SYSROOT/tensorrt/include"
@@ -36,6 +45,7 @@ CompileFlags:
     - -I$PROJECT_DIR/src
     - -isystem$SYSROOT/tensorrt/include
     - -isystem$SYSROOT/cuda/include
+    - -isystem$SYSROOT/opencv/include
     - --cuda-path=$SYSROOT/cuda
     - --cuda-host-only
     - -nocudalib

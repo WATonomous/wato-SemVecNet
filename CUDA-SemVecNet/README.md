@@ -27,6 +27,11 @@ CUDA-SemVecNet/
 Headers go in `include/` and are included as `#include "semvecnet/foo.hpp"`. `include/` is what
 gets installed for the monorepo; `src/` is also on the include path (privately) for internal headers.
 
+`include/common/dtype.hpp` is copied unchanged from `wato-cuda-bevfusion`
+(`CUDA-BEVFusion/src/common/dtype.hpp` at `f5c954d4f06f09e9caf4eafb8f19884661508fc7`).
+It provides the shared `nvtype` types without linking BEVFusion. Keep it in sync
+with BEVFusion when changing the shared type definitions.
+
 Use `.cpp` for normal host code and `.cu` only for files with CUDA kernels (`__global__`, `<<<>>>`).
 Both compile into the same `libsemvecnet_core.so`, so a `.cpp` calls a kernel through a plain C++
 function declared in a header and defined in the `.cu` file (see `hello.hpp` / `hello.cu`).
@@ -38,9 +43,11 @@ Edit on the host; build and run in a throwaway GPU container (no dev container n
 Needs Docker + NVIDIA Container Toolkit.
 
 1. One-time: `tool/docker_run.sh true` builds the `semvecnet:dev` image (CUDA 13.4 + TensorRT 11.4, same as the monorepo bevfusion build).
-2. One-time: `tool/sync_headers.sh` copies the image's CUDA/TensorRT headers into `.sysroot/`
+2. Run `tool/sync_headers.sh` to copy CUDA, TensorRT, and OpenCV headers into `.sysroot/`
    (git-ignored), which host IntelliSense reads (`.vscode/c_cpp_properties.json` for the
    Microsoft C/C++ extension, generated `.clangd` for clangd). Reload the VS Code window after.
+   If an older image lacks OpenCV, rebuild it or set `SEMVECNET_OPENCV_IMAGE` to a local build
+   image that already has the OpenCV development headers.
 3. Build: `tool/build.sh` (or Ctrl+Shift+B). On the host it re-runs itself inside the container.
 4. Run: `tool/docker_run.sh build/semvecnet model/semvecnet.plan`, or `tool/docker_run.sh` for a shell.
 5. In VS Code, build and run are separate: **Ctrl+Shift+B** builds. Run with the task

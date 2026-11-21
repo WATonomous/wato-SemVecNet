@@ -55,7 +55,9 @@ file(GLOB_RECURSE SEMVECNET_PLUGIN_SOURCES CONFIGURE_DEPENDS
 
 # ----------------------------- libsemvecnet_core.so ------------------------
 if(SEMVECNET_CORE_SOURCES)
+  find_package(OpenCV REQUIRED COMPONENTS core imgproc)
   add_library(semvecnet_core SHARED ${SEMVECNET_CORE_SOURCES})
+  target_link_libraries(semvecnet_core PRIVATE opencv_core opencv_imgproc)
   set(_scope PUBLIC)
 else()
   message(WARNING "No sources under src/semvecnet or src/common yet; "
@@ -99,6 +101,13 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/test_plan_loader.cpp")
   target_link_libraries(test_plan_loader PRIVATE CUDA::cudart TensorRT::TensorRT)
   # Optional: add to install targets if you want it installed
   # list(APPEND _install_targets test_plan_loader)
+endif()
+
+include(CTest)
+if(BUILD_TESTING AND SEMVECNET_CORE_SOURCES)
+  add_executable(test_hrnet_preprocessing tests/hrnet_preprocessing.cpp)
+  target_link_libraries(test_hrnet_preprocessing PRIVATE semvecnet_core)
+  add_test(NAME hrnet_preprocessing COMMAND test_hrnet_preprocessing)
 endif()
 
 # ----------------------------- install / export ----------------------------

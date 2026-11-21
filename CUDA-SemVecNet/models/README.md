@@ -45,5 +45,5 @@ import tensorrt as trt
 
 ## For Testing
 
-Your `loadRuntime()` function in `main.cpp` is **correctly implemented**!
-The only issue is the TensorRT version mismatch.
+`loadRuntime()` in `src/common/common.cpp` deserializes a TensorRT engine.
+The engine must be compatible with the TensorRT version and GPU in use.

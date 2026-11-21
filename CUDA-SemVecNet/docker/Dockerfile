@@ -8,7 +8,7 @@ ENV FORCE_CUDA=1
 # Install TensorRT 8.5.3 and development tools
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build git wget ca-certificates \
+        build-essential cmake ninja-build git wget ca-certificates libopencv-dev \
         libcudnn8=8.6.0.163-1+cuda11.8 \
         libcudnn8-dev=8.6.0.163-1+cuda11.8 \
         libnvinfer8=8.5.3-1+cuda11.8 \

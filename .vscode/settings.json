@@ -13,6 +13,11 @@
   },
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "C_Cpp.default.cppStandard": "c++17",
+  "[cpp][cuda-cpp]": {
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false
+  },
   "files.associations": {
     "*.cu": "cuda-cpp",
     "*.cuh": "cuda-cpp",

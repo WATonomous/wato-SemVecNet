@@ -3,11 +3,13 @@
   "configurations": [
     {
       "name": "Host (headers from semvecnet:dev)",
+      "mergeConfigurations": true,
       "includePath": [
         "${workspaceFolder}/CUDA-SemVecNet/include",
         "${workspaceFolder}/CUDA-SemVecNet/src",
         "${workspaceFolder}/CUDA-SemVecNet/.sysroot/cuda/include",
-        "${workspaceFolder}/CUDA-SemVecNet/.sysroot/tensorrt/include"
+        "${workspaceFolder}/CUDA-SemVecNet/.sysroot/tensorrt/include",
+        "${workspaceFolder}/CUDA-SemVecNet/.sysroot/opencv/include"
       ],
       "compilerPath": "/usr/bin/g++",
       "cppStandard": "c++17",
