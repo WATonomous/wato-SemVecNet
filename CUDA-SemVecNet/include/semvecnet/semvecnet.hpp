@@ -7,6 +7,7 @@
 #include <NvInfer.h>
 
 #include "common/common.hpp"
+#include "semvecnet/lidar-semantic-projection.hpp"
 
 namespace semvecnet {
 
@@ -23,10 +24,12 @@ struct PreparedFrame {
 
 // Same host buffer layout as BEVFusion: one tightly packed RGB8 image per
 // pointer (all the same size), and five FP16 values per LiDAR point.
-// Writes the intermediate frame for HRNet and LiDAR projection. No CUDA stream
-// or calibration is needed. The final pipeline result is not defined yet.
-void forward(const unsigned char *const *camera_images,
-             const nvtype::half *lidar_points, int num_points, int num_cameras,
-             int image_width, int image_height);
+// Calibrations must match camera order and use intrinsics scaled to the HRNet
+// mask dimensions. Returned point indices refer to the input LiDAR points.
+std::vector<semantic_projection::LabeledPoint>
+forward(const unsigned char *const *camera_images,
+        const nvtype::half *lidar_points, int num_points, int num_cameras,
+        int image_width, int image_height,
+        const std::vector<semantic_projection::CameraCalibration> &calibrations);
 
 } // namespace semvecnet
