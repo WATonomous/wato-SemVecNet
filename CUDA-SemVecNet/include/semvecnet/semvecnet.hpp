@@ -20,9 +20,10 @@ struct PreparedFrame {
 
 // Same host buffer layout as BEVFusion: one tightly packed RGB8 image per
 // pointer (all the same size), and five FP16 values per LiDAR point.
-// Synchronous preprocessing only; no CUDA stream or calibration is needed.
-PreparedFrame forward(const unsigned char *const *camera_images,
-                      const nvtype::half *lidar_points, int num_points,
-                      int num_cameras, int image_width, int image_height);
+// Writes the intermediate frame for HRNet and LiDAR projection. No CUDA stream
+// or calibration is needed. The final pipeline result is not defined yet.
+void forward(const unsigned char *const *camera_images,
+             const nvtype::half *lidar_points, int num_points, int num_cameras,
+             int image_width, int image_height);
 
 } // namespace semvecnet

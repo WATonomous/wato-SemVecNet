@@ -29,8 +29,8 @@ int main() {
   const nvtype::half lidar[] = {{0x3c00}, {0xc000}, {0x3800}, {0x4800},
                                 {0},      {0x4400}, {0x4000}, {0x4200},
                                 {0},      {0x3400}};
-  const auto frame =
-      semvecnet::forward(images.data(), lidar, 2, cameras, width, height);
+  semvecnet::PreparedFrame frame;
+  semvecnet::forward(images.data(), lidar, 2, cameras, width, height, frame);
   const auto near = [](float a, float b) { return std::abs(a - b) < 1e-6f; };
   if (frame.hrnet_images.size() != cameras) {
     std::cerr << "Incorrect camera count\n";
@@ -55,7 +55,7 @@ int main() {
   }
   images.back() = nullptr;
   try {
-    semvecnet::forward(images.data(), lidar, 2, cameras, width, height);
+    semvecnet::forward(images.data(), lidar, 2, cameras, width, height, frame);
   } catch (const std::invalid_argument &) {
     return 0;
   }

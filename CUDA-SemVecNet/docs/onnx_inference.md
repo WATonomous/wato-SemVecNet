@@ -22,8 +22,9 @@ five FP16 values (`x, y, z, intensity, time_lag`) per LiDAR point. Pass the actu
 shared image width and height, before any BEVFusion network crop. For example:
 
 ```cpp
-auto prepared = semvecnet::forward(camera_images.data(), lidar_fp16, num_points,
-                                   8, image_width, image_height);
+semvecnet::PreparedFrame prepared;
+semvecnet::forward(camera_images.data(), lidar_fp16, num_points, 8,
+                   image_width, image_height, prepared);
 ```
 
 Run HRNet once for each `prepared.hrnet_images[i]`, binding it as FP32

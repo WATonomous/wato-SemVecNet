@@ -7,9 +7,9 @@
 
 namespace semvecnet {
 
-PreparedFrame forward(const unsigned char *const *camera_images,
-                      const nvtype::half *lidar_points, int num_points,
-                      int num_cameras, int image_width, int image_height) {
+void forward(const unsigned char *const *camera_images,
+             const nvtype::half *lidar_points, int num_points, int num_cameras,
+             int image_width, int image_height) {
   if (!camera_images || num_cameras <= 0 || image_width <= 0 ||
       image_height <= 0)
     throw std::invalid_argument(
@@ -20,8 +20,9 @@ PreparedFrame forward(const unsigned char *const *camera_images,
 
   const camera::Preprocessor camera;
   const lidar::Preprocessor lidar;
-  return {camera.forward(camera_images, num_cameras, image_width, image_height),
-          lidar.forward(lidar_points, num_points)};
+  PreparedFrame prepared = {
+      camera.forward(camera_images, num_cameras, image_width, image_height),
+      lidar.forward(lidar_points, num_points)};
 }
 
 } // namespace semvecnet
