@@ -49,10 +49,12 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+# rclone credentials kept in the checkout (gitignored) take precedence over ~/.config/rclone
+[ -z "${RCLONE_CONFIG:-}" ] && [ -f "$REPO/rclone.conf" ] && export RCLONE_CONFIG="$REPO/rclone.conf"
 ASSETS="${SEMVECNET_ASSETS:-$HOME/Desktop/data/semvecnet_assets}"
 RUNS="${SEMVECNET_RUNS:-$HOME/Desktop/data/semvecnet_runs}"
 CKPT="${SEMVECNET_CKPT:-$REPO/SemVecNet/ckpts/mAP_epoch_99.pth}"
-ENGINE="$ASSETS/hrnet.engine"
+ENGINE="${SEMVECNET_ENGINE:-$ASSETS/hrnet.engine}"   # TensorRT engines only run on the GPU model they were built on
 HRNET_IMAGE="${SEMVECNET_HRNET_IMAGE:-semvecnet-mcap-hrnet:latest}"
 SVN_IMAGE=naruarjun/semvecnet:v2
 ASSETS_DRIVE_ID=1bV7mnjSOYg2M-LBbM59C_eFDIvqvZZ7i   # docs/prepare_dataset.md + README.md weights folder
@@ -102,7 +104,11 @@ if [[ "$PREPARE" == 0 ]]; then
     mkdir -p "$OUT"
 fi
 mkdir -p "$ASSETS"
-DOCKER=(docker run --rm --gpus all --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp -e MPLCONFIGDIR=/tmp
+# Rootless Docker (e.g. on SLURM clusters) already maps container root to the calling user; a --user there maps to a
+# sub-UID that cannot write the bind-mounted output directories.
+USER_ARGS=(--user "$(id -u):$(id -g)")
+docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q rootless && USER_ARGS=()
+DOCKER=(docker run --rm --gpus "${SEMVECNET_DOCKER_GPUS:-all}" --ipc=host "${USER_ARGS[@]}" -e HOME=/tmp -e MPLCONFIGDIR=/tmp
         -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONWARNINGS=ignore)
 
 # ------------------------------------------------------------------ one-time setup
@@ -131,6 +137,7 @@ if [[ "$STAGES" == *1* ]] && [ ! -f "$ENGINE" ]; then
             --arch ocrnet.HRNet_Mscale --result_dir logs/onnx-export/mcap > build/convert.log 2>&1 || { tail -20 build/convert.log; exit 1; }
         trtexec --onnx=hrnet.onnx --fp16 --workspace=4096 --buildOnly --saveEngine=build/hrnet.engine > build/trtexec.log 2>&1 \
             || { tail -20 build/trtexec.log; exit 1; }' 2>&1 | quiet
+    mkdir -p "$(dirname "$ENGINE")"
     mv "$ASSETS/TensorRT-tutorial/build/hrnet.engine" "$ENGINE"
 fi
 

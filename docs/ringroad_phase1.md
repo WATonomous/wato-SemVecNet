@@ -1,5 +1,24 @@
 # Ring Road Phase 1 on a GPU server
 
+## WATcloud SLURM cluster
+
+On a login node, from a fresh checkout:
+
+```sh
+./run_stage1_slurm.sh
+```
+
+The script installs rclone into `~/.local/bin` if it is missing and checks that the `gdrive` remote can see the Bags folder. Set up `gdrive` before the first run, either by copying a working `rclone.conf` into the repo root (`scp rclone.conf <server>:<repo>/`; it is gitignored because it holds your Google Drive token, and every script uses it ahead of `~/.config/rclone/rclone.conf`) or by running `rclone config` (see below). The script then submits itself with `sbatch` (8 CPUs, 32 GB, a 16 GiB GPU shard, 100 GiB tmpdisk, 1 day) and follows the job log at `logs/stage1-<job>.out`. Ctrl-C stops following the log; the job keeps running. Inside the job:
+
+1. Starts rootless Docker (`slurm-start-dockerd.sh`), pulls `naruarjun/tensorrt-nvidia-semseg` into the job's `/tmp` and checks the GPU from inside a container.
+2. Builds the HRNet TensorRT engine once per GPU model (~15 min), in `~/semvecnet-phase1/assets/hrnet_<gpu>.engine`.
+3. For each split in `tools/phase1_plan_b.txt`: downloads it to `/tmp`, makes the semantic maps, aligns them to `ring_road.osm` and deletes the split. The log shows `[i/8]`, the split being downloaded (bytes / % / speed / ETA every 30 s), the run being processed, scan progress and the result.
+4. Writes the dataset to `data/` in the repo: `train/` and `test/` (`maps/`, `labels/` with the Ring Road ground-truth vectors, `train.pkl` / `test.pkl`), `previews/` and `manifest.json`.
+
+If the job hits its time limit or fails, run the script again; finished splits are skipped. Override resources with sbatch options, e.g. `./run_stage1_slurm.sh --gres shard:rtx_3090:16384,tmpdisk:102400` or `--partition=compute_dense --time=3-00:00:00`. `SEMVECNET_WORK` (default `~/semvecnet-phase1`, ~3 GB of assets and per-split runs) and `SEMVECNET_DATA` (default `<repo>/data`) move the outputs. `/home` has a 20 GiB quota, so bags and Docker images never go there.
+
+## Any GPU server with Docker
+
 From a fresh checkout on the server:
 
 ```sh

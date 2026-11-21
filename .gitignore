@@ -1,5 +1,8 @@
 /*.sh
 !/run_mcap_pipeline.sh
+!/run_stage1_slurm.sh
+/logs/
+/rclone.conf
 change_submit.py
 cluster_submit.yaml
 

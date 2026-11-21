@@ -36,11 +36,21 @@ from collections import OrderedDict
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
+if (REPO / 'rclone.conf').is_file():  # rclone credentials kept in the checkout (gitignored)
+    os.environ.setdefault('RCLONE_CONFIG', str(REPO / 'rclone.conf'))
 BAGS_FOLDER_ID = '127Kw3o7Org474rkK1wwMDRZKiYHaR0Db'  # Drive folder "Bags"
 SVN_IMAGE = 'naruarjun/semvecnet:v2'
 PANO8 = ['camera_pano_nn', 'camera_pano_ne', 'camera_pano_ee', 'camera_pano_se',
          'camera_pano_ss', 'camera_pano_sw', 'camera_pano_ww', 'camera_pano_nw']
 PRESETS = dict(pano8=PANO8, pano6=[c for c in PANO8 if c not in ('camera_pano_ee', 'camera_pano_ww')], all=None)
+
+
+def docker_user():
+    """--user for docker run, except under rootless Docker (SLURM clusters), where container root already is the
+    calling user and any other UID cannot write the bind-mounted run directories."""
+    r = subprocess.run(['docker', 'info', '--format', '{{.SecurityOptions}}'], stdout=subprocess.PIPE,
+                       stderr=subprocess.DEVNULL, text=True)
+    return [] if 'rootless' in r.stdout else ['--user', f'{os.getuid()}:{os.getgid()}']
 
 
 def parse_list(path):
@@ -102,9 +112,12 @@ def download(split, cache, live=False):
     t = time.time()
     cmd = ['rclone', 'copyto', '--drive-root-folder-id', BAGS_FOLDER_ID, f'gdrive:{split}', str(dst),
            '--multi-thread-streams', '8']
-    if live:
+    if live and sys.stdout.isatty():
         # Native transfer progress includes bytes, speed, ETA and a progress bar.
         cmd += ['--progress', '--stats', '5s']
+    elif live:
+        # Log file (e.g. a SLURM job): one plain line of bytes / % / speed / ETA every 30 s instead of a redrawn screen.
+        cmd += ['--stats', '30s', '--stats-one-line', '--stats-log-level', 'NOTICE']
     r = subprocess.run(cmd, stderr=None if live else subprocess.PIPE, text=True)
     if r.returncode != 0 or not dst.is_file():
         err = '\n'.join(l for l in (r.stderr or '').splitlines() if 'NOTICE' not in l)
@@ -139,7 +152,7 @@ def stage1(bag, out, camset, extra, osm, live=False, keep_inputs=False):
 
 
 def offsets(out, osm, image=SVN_IMAGE):
-    cmd = ['docker', 'run', '--rm', '--entrypoint', 'python', '--user', f'{os.getuid()}:{os.getgid()}', '-e', 'HOME=/tmp',
+    cmd = ['docker', 'run', '--rm', '--entrypoint', 'python', *docker_user(), '-e', 'HOME=/tmp',
            '-e', 'PYTHONWARNINGS=ignore', '-v', f'{REPO / "tools"}:/repo/tools:ro',
            '-v', f'{Path(osm).resolve()}:/gt/map.osm:ro', '-v', f'{out}:/run', image,
            '/repo/tools/mcap_estimate_offset.py', '--run', '/run', '--osm', '/gt/map.osm']

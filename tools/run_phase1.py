@@ -13,7 +13,7 @@ import subprocess
 import sys
 from threading import Thread
 
-from batch_stage1 import REPO, parse_list, run_name
+from batch_stage1 import REPO, docker_user, parse_list, run_name
 
 TOOLS = REPO / 'tools'
 PLAN = TOOLS / 'phase1_plan_b.txt'
@@ -43,11 +43,13 @@ def previews(root, port):
             thread.join()
 
 
-def run_phase1(work):
+def run_phase1(work, cache=None, dataset=None):
     root = work / 'outputs'
-    runs, dataset = root / 'runs', root / 'dataset'
+    runs = root / 'runs'
+    dataset = dataset or root / 'dataset'
+    cache = cache or work / 'cache'
     runs.mkdir(parents=True, exist_ok=True)
-    dataset.mkdir(exist_ok=True)
+    dataset.mkdir(parents=True, exist_ok=True)
     expected = {run_name(split, camset) for split, jobs in parse_list(PLAN).items() for camset, _ in jobs}
     extra = {p.parent.name for p in runs.glob('*/DONE')} - expected
     if extra:
@@ -64,11 +66,11 @@ def run_phase1(work):
     subprocess.run([REPO / 'run_mcap_pipeline.sh', '--prepare-stage1'], env=env, check=True)
 
     print('[Bags] Processing Plan B in order (one MCAP split on disk)', flush=True)
-    subprocess.run([sys.executable, TOOLS / 'batch_stage1.py', PLAN, '--runs', runs, '--cache', work / 'cache',
+    subprocess.run([sys.executable, TOOLS / 'batch_stage1.py', PLAN, '--runs', runs, '--cache', cache,
                     '--osm', OSM, '--offset-image', IMAGE, '--live'], env=env, check=True)
 
     print('[Export] Generating ground-truth labels, train/test sets, and overlay previews', flush=True)
-    subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'python', '--user', f'{os.getuid()}:{os.getgid()}',
+    subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'python', *docker_user(),
                     '-e', 'HOME=/tmp', '-e', 'PYTHONDONTWRITEBYTECODE=1',
                     '-v', f'{TOOLS}:/repo/tools:ro', '-v', f'{OSM}:/gt/map.osm:ro',
                     '-v', f'{runs}:/runs:ro', '-v', f'{dataset}:/dataset', IMAGE,
@@ -86,6 +88,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--work-dir', type=Path, default=Path.home() / 'semvecnet-phase1',
                     help='dedicated server disk directory for assets, the transient bag, and outputs')
+    ap.add_argument('--cache', type=Path, help='where each bag split is downloaded (default: <work-dir>/cache); '
+                    'needs room for the largest split, ~22 GB')
+    ap.add_argument('--dataset-out', type=Path, help='where the train/test dataset is written '
+                    '(default: <work-dir>/outputs/dataset)')
     ap.add_argument('--preview-port', type=int, default=8765, help='loopback HTTP port (0 disables live previews)')
     args = ap.parse_args()
     if not 0 <= args.preview_port <= 65535:
@@ -101,7 +107,8 @@ def main():
             except BlockingIOError:
                 sys.exit(f'Phase 1 is already running in {work}')
             with previews(root, args.preview_port):
-                run_phase1(work)
+                run_phase1(work, args.cache and args.cache.expanduser().resolve(),
+                           args.dataset_out and args.dataset_out.expanduser().resolve())
     except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
         sys.exit(f'Phase 1 stopped: {exc}')
     except KeyboardInterrupt:
