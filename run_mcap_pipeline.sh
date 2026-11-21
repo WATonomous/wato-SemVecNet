@@ -2,6 +2,7 @@
 # One command: ROS 2 MCAP (cameras + LiDAR) -> SemVecNet vector map -> accuracy against a Lanelet2 HD map.
 #
 #   ./run_mcap_pipeline.sh BAG [options]
+#   ./run_mcap_pipeline.sh --prepare-stage1     set up HRNet without a bag
 #
 #   BAG   a .mcap file or a rosbag2 directory (split files <name>_0.mcap, _1, ... are read in order)
 #
@@ -20,19 +21,26 @@
 #   --duration S         process S seconds
 #   --max-frames N       stop after N keyframes
 #   --hz H               keyframe rate        (default 2, the nuScenes keyframe rate the model was trained on)
+#   --min-move M         Minimum XY distance between written keyframes (default 2 m; 0 disables)
+#   --min-sweep-move M   Minimum XY distance from the last processed sweep for map-only sweeps (default 0.25 m; 0 disables)
 #   --map-hz H           LiDAR sweeps/s labelled into the semantic map (default 10; 2 = original nuScenes recipe)
 #   --camera-ground 0|1  also paint camera labels onto the road plane (dense, sees thin paint)   (default 1)
 #   --camera-classes C   which classes come from the camera: all | e.g. lane,crosswalk   (default all)
 #   --camera-range M     max distance of camera ground labels (default 25 m)
-#   --cameras A,B        camera namespaces    (default: every <ns>/image_rect_compressed with a camera_info)
+#   --cameras A,B        camera names, e.g. camera_pano_nn,camera_pano_ne (names not in the bag are skipped; default:
+#                        every camera with a camera_info - image_rect_compressed, else raw image_rect/image_raw)
 #   --lidar-topic T      (default: auto, /lidar/all/points_merged - all LiDARs fused - else /lidar_cc/velodyne_points)
 #   --odom-topic T       (default: auto, /novatel/oem7/odom - UTM, which is what the map is compared in)
-#   --pose-source S      auto|odom|tf         (default auto: GNSS odometry, else /tf world frame, else any odometry)
+#   --pose-source S      auto|odom|tf|inspva  (default auto: GNSS odometry, else NovAtel INSPVA converted to UTM,
+#                        else /tf world frame, else any odometry)
+#   --inspva-topic T     (default /novatel/oem7/inspva; used when the bag has no /novatel/oem7/odom)
 #   --ego-frame F        map centre           (default: rear_axle if in TF, like nuScenes' ego frame)
 #   --score-thr T        score threshold for drawn vectors and precision/recall (default 0.4; AP uses all)
 #   --class-thr C=T,...  per-class overrides of --score-thr (default divider=0.1: SemVecNet finds dividers
 #                        in the right place but with low confidence on this car's maps)
 #   --pose-offset DX DY  shift the ego pose (m, UTM) before scoring
+#   --near-map           stage 1 only maps while the ego is within 60 m (--near-map-margin M) of the --gt map's roads,
+#                        so driving off the mapped roads costs no HRNet time (needs a UTM pose: NovAtel odom / INSPVA)
 #   --divider-paint-check  drop predicted dividers with no lane paint under them in the semantic map (removes
 #                        lanes SemVecNet invents from the road's width; predictions_unfiltered.json keeps all)
 #
@@ -45,7 +53,7 @@ ASSETS="${SEMVECNET_ASSETS:-$HOME/Desktop/data/semvecnet_assets}"
 RUNS="${SEMVECNET_RUNS:-$HOME/Desktop/data/semvecnet_runs}"
 CKPT="${SEMVECNET_CKPT:-$REPO/SemVecNet/ckpts/mAP_epoch_99.pth}"
 ENGINE="$ASSETS/hrnet.engine"
-HRNET_IMAGE=semvecnet-mcap-hrnet:latest
+HRNET_IMAGE="${SEMVECNET_HRNET_IMAGE:-semvecnet-mcap-hrnet:latest}"
 SVN_IMAGE=naruarjun/semvecnet:v2
 ASSETS_DRIVE_ID=1bV7mnjSOYg2M-LBbM59C_eFDIvqvZZ7i   # docs/prepare_dataset.md + README.md weights folder
 
@@ -59,30 +67,41 @@ quiet_eval() { grep --line-buffered -v -E '^(results path|Formatting|Cls data fo
 # ------------------------------------------------------------------ arguments
 [ $# -ge 1 ] || { usage; exit 1; }
 case "$1" in -h|--help) usage; exit 0 ;; esac
-BAG="$(realpath -m "$1")"; shift
-OUT="" GT="$REPO/ring_road.osm" STAGES=123 S1=() S2=() S3=() INFER=() CLASS_THR="divider=0.1"
+PREPARE=0
+if [[ "$1" == --prepare-stage1 ]]; then
+    PREPARE=1 BAG="" STAGES=1
+else
+    BAG="$(realpath -m "$1")"; STAGES=123
+fi
+shift
+OUT="" GT="$REPO/ring_road.osm" S1=() S2=() S3=() INFER=() CLASS_THR="divider=0.1"
 while [ $# -gt 0 ]; do
     case "$1" in
         -o|--out)      OUT="$(realpath -m "$2")"; shift 2 ;;
         --gt)          GT="$2"; shift 2 ;;
         --stages)      STAGES="$2"; shift 2 ;;
-        --start|--duration|--max-frames|--hz|--map-hz|--cameras|--lidar-topic|--odom-topic|--pose-source|--ego-frame|\
-        --camera-ground|--camera-classes|--camera-range)
+        --start|--duration|--max-frames|--hz|--map-hz|--min-move|--min-sweep-move|--cameras|--lidar-topic|--odom-topic|--pose-source|--inspva-topic|--near-map-margin|--ego-frame|\
+        --camera-ground|--camera-classes|--camera-range|--expect-cameras)
                        S1+=("$1" "$2"); shift 2 ;;
+        --no-inputs)   S1+=("$1"); shift ;;
         --score-thr)   S2+=("$1" "$2"); S3+=("$1" "$2"); shift 2 ;;
         --pose-offset) S3+=("$1" "$2" "$3"); shift 3 ;;
         --class-thr)   CLASS_THR="$2"; shift 2 ;;
         --divider-paint-check) INFER+=("$1"); shift ;;
+        --near-map)    NEAR_MAP=1; shift ;;
         -h|--help)     usage; exit 0 ;;
         *)             die "unknown option $1 (see --help)" ;;
     esac
 done
-[ -e "$BAG" ] || die "bag not found: $BAG"
-NAME="$(basename "${BAG%.mcap}")"
-OUT="${OUT:-$RUNS/$NAME}"
-if [ -d "$BAG" ]; then BAG_DIR="$BAG"; BAG_ARG=/bag; else BAG_DIR="$(dirname "$BAG")"; BAG_ARG="/bag/$(basename "$BAG")"; fi
-if [ "$GT" != none ]; then GT="$(realpath "$GT")"; [ -f "$GT" ] || die "ground truth map not found: $GT (use --gt none to skip evaluation)"; fi
-mkdir -p "$OUT" "$ASSETS"
+if [[ "$PREPARE" == 0 ]]; then
+    [ -e "$BAG" ] || die "bag not found: $BAG"
+    NAME="$(basename "${BAG%.mcap}")"
+    OUT="${OUT:-$RUNS/$NAME}"
+    if [ -d "$BAG" ]; then BAG_DIR="$BAG"; BAG_ARG=/bag; else BAG_DIR="$(dirname "$BAG")"; BAG_ARG="/bag/$(basename "$BAG")"; fi
+    if [ "$GT" != none ]; then GT="$(realpath "$GT")"; [ -f "$GT" ] || die "ground truth map not found: $GT (use --gt none to skip evaluation)"; fi
+    mkdir -p "$OUT"
+fi
+mkdir -p "$ASSETS"
 DOCKER=(docker run --rm --gpus all --ipc=host --user "$(id -u):$(id -g)" -e HOME=/tmp -e MPLCONFIGDIR=/tmp
         -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONWARNINGS=ignore)
 
@@ -93,9 +112,6 @@ fetch() {  # fetch <path in the weights Drive folder> <local dir>
     echo ">> Downloading $1"
     rclone copy --drive-root-folder-id "$ASSETS_DRIVE_ID" "gdrive:$1" "$2" 2>&1 | grep -v NOTICE || true
 }
-
-[ -f "$CKPT" ] || fetch "SemVecNet checkpoints/nuscenes-semantic/$(basename "$CKPT")" "$(dirname "$CKPT")"
-[ -f "$CKPT" ] || die "missing SemVecNet checkpoint $CKPT"
 
 if [[ "$STAGES" == *1* ]] && [ ! -f "$ENGINE" ]; then
     echo ">> One-time: building the HRNet TensorRT engine for this GPU (~15 min)"
@@ -122,16 +138,29 @@ if [[ "$STAGES" == *1* ]] && ! docker image inspect "$HRNET_IMAGE" >/dev/null 2>
     echo ">> One-time: building $HRNET_IMAGE"
     docker build -q -t "$HRNET_IMAGE" -f "$REPO/docker/mcap_hrnet.Dockerfile" "$REPO/docker" >/dev/null
 fi
-docker image inspect "$SVN_IMAGE" >/dev/null 2>&1 || docker pull "$SVN_IMAGE"
+[[ "$PREPARE" == 0 ]] || exit 0
 
 # ------------------------------------------------------------------ stages
 SVN_MOUNTS=(-v "$REPO/SemVecNet/projects:/workspace/SemVecNet/projects:ro"
-            -v "$CKPT:/workspace/SemVecNet/ckpts/mAP_epoch_99.pth:ro"
             -v "$REPO/tools:/repo/tools:ro" -v "$OUT:/out" -w /workspace/SemVecNet)
+if [[ "$STAGES" == *2* || "$STAGES" == *3* ]]; then
+    docker image inspect "$SVN_IMAGE" >/dev/null 2>&1 || docker pull "$SVN_IMAGE"
+fi
+if [[ "$STAGES" == *2* ]]; then
+    [ -f "$CKPT" ] || fetch "SemVecNet checkpoints/nuscenes-semantic/$(basename "$CKPT")" "$(dirname "$CKPT")"
+    [ -f "$CKPT" ] || die "missing SemVecNet checkpoint $CKPT"
+    SVN_MOUNTS+=(-v "$CKPT:/workspace/SemVecNet/ckpts/mAP_epoch_99.pth:ro")
+fi
 
 if [[ "$STAGES" == *1* ]]; then
     echo ">> [1/3] Semantic BEV maps from $BAG"
-    "${DOCKER[@]}" -v "$REPO:/repo:ro" -v "$BAG_DIR:/bag:ro" -v "$ENGINE:/assets/hrnet.engine:ro" -v "$OUT:/out" \
+    NM=()
+    if [ "${NEAR_MAP:-0}" = 1 ]; then
+        [ "$GT" != none ] || die "--near-map needs the Lanelet2 map (--gt)"
+        NM=(-v "$GT:/gt/map.osm:ro")
+        S1+=(--near-map /gt/map.osm)
+    fi
+    "${DOCKER[@]}" -v "$REPO:/repo:ro" -v "$BAG_DIR:/bag:ro" -v "$ENGINE:/assets/hrnet.engine:ro" -v "$OUT:/out" "${NM[@]}" \
         "$HRNET_IMAGE" python /repo/tools/mcap_semantic_mapping.py --bag "$BAG_ARG" --out /out \
         --engine /assets/hrnet.engine "${S1[@]}" 2>&1 | quiet
 fi
@@ -153,6 +182,10 @@ if [[ "$STAGES" == *2* || "$STAGES" == *3* ]]; then
 fi
 
 echo ">> Done. Outputs in $OUT"
+if [[ "$STAGES" == 1 ]]; then
+    echo "   maps/*.png, cams/*.jpg, frames.jsonl, meta.json"
+    exit 0
+fi
 echo "   compare.mp4, compare/      cameras + LiDAR | semantic map | SemVecNet | ground truth | overlay"
 echo "   semvecnet.mp4, viz/        camera | semantic map | predicted polylines"
 echo "   vectors/<frame>.json       polylines in the ego frame (x fwd, y left, m)"

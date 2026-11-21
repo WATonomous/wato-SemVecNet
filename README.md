@@ -36,6 +36,7 @@ Vector maps are essential in autonomous driving for tasks like localization and 
 - [Installation](docs/install.md)
 - [Prepare Dataset](docs/prepare_dataset.md)
 - [Train and Eval](docs/train_eval.md)
+- [Run Ring Road Phase 1 on a GPU server](docs/ringroad_phase1.md)
 
 
 ## Acknowledgements

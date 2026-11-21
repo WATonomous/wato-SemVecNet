@@ -5,6 +5,7 @@ from .nuscenes_map_dataset import CustomNuScenesLocalMapDataset
 from .av2_map_dataset import CustomAV2LocalMapDataset
 from .nuscenes_offlinemap_dataset import CustomNuScenesOfflineLocalMapDataset
 from .av2_offlinemap_dataset import CustomAV2OfflineLocalMapDataset
+from .ringroad_semantic_dataset import RingRoadSemanticMapDataset
 __all__ = [
     'CustomNuScenesDataset','CustomNuScenesLocalMapDataset'
 ]

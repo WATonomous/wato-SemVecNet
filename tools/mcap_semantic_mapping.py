@@ -8,6 +8,10 @@ This is tools/nusc_semantic_mapping.py with the nuScenes devkit swapped for an M
   -> an ego-centric 60 x 30 m, 0.2 m/px map (300x150 px) is rendered per keyframe.
 The maps are what SemVecNet was trained on, so stage 2 (tools/mcap_infer_semvecnet.py) uses them as-is.
 
+--min-move sets the minimum XY distance between written keyframes (default 2 m).
+--min-sweep-move skips map-only sweeps within 0.25 m by default of the last processed sweep.
+Set either threshold to 0 to disable its check.
+
 Everything the pipeline needs is read from the bag:
   cameras      <ns>/image_rect_compressed (JPEG) + <ns>/camera_info (P or K)
   LiDAR        a sensor_msgs/PointCloud2 topic with x, y, z (+ intensity)
@@ -41,6 +45,17 @@ from mcap.reader import make_reader  # noqa: E402
 from mcap_ros2.decoder import DecoderFactory  # noqa: E402
 
 IMAGE_SUFFIX = '/image_rect_compressed'
+# camera image topics stage 1 can read, best first: (suffix, message type, already rectified). Raw sensor_msgs/Image
+# topics are decoded (rgb/bgr/mono/Bayer) and, when not rectified, undistorted with their camera_info.
+IMAGE_TOPICS = (
+    (IMAGE_SUFFIX, 'CompressedImage', True),
+    ('/image_rect_color', 'Image', True),
+    ('/image_rect', 'Image', True),
+    ('/image_color', 'Image', False),
+    ('/image_raw', 'Image', False),
+)
+BAYER = dict(bayer_rggb8=cv2.COLOR_BayerBG2RGB, bayer_bggr8=cv2.COLOR_BayerRG2RGB,  # ROS -> OpenCV naming,
+             bayer_gbrg8=cv2.COLOR_BayerGR2RGB, bayer_grbg8=cv2.COLOR_BayerGB2RGB)  # as in cv_bridge
 WORLD_FRAMES = ('map', 'odom', 'world', 'earth', 'utm')
 NETWORK_HW = (1440 // 2, 1920 // 2)  # HRNet engine input (H, W), as in nusc_semantic_mapping.py
 
@@ -227,12 +242,68 @@ class Segmenter:
     def __call__(self, image_rgb):
         return self.post(self.infer(self.pre(image_rgb)), image_rgb.shape)
 
-    def decode_pre(self, jpeg):
-        img = cv2.imdecode(np.frombuffer(bytes(jpeg), np.uint8), cv2.IMREAD_COLOR)
+    def decode_pre(self, data, rect=None):
+        img = decode_image(data, rect)
         if img is None:
             return None, None
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         return img, self.pre(img)
+
+
+def decode_image(data, rect=None):
+    """Camera message payload -> RGB uint8. data: JPEG bytes (CompressedImage) or ('raw', encoding, h, w, step,
+    bytes) (Image); rect: (map1, map2) from cv2.initUndistortRectifyMap for unrectified images."""
+    if not isinstance(data, tuple):
+        img = cv2.imdecode(np.frombuffer(bytes(data), np.uint8), cv2.IMREAD_COLOR)
+        return None if img is None else cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    _, enc, h, w, step, buf = data
+    enc = enc.lower()
+    a = np.frombuffer(bytes(buf), np.uint8)
+    if enc in BAYER or enc in ('mono8', '8uc1'):
+        a = a.reshape(h, step)[:, :w]
+        img = cv2.cvtColor(a, BAYER[enc]) if enc in BAYER else cv2.cvtColor(a, cv2.COLOR_GRAY2RGB)
+    elif enc in ('rgb8', 'bgr8', '8uc3'):
+        a = a.reshape(h, step)[:, :w * 3].reshape(h, w, 3)
+        img = a.copy() if enc == 'rgb8' else cv2.cvtColor(a, cv2.COLOR_BGR2RGB)
+    elif enc in ('rgba8', 'bgra8'):
+        a = a.reshape(h, step)[:, :w * 4].reshape(h, w, 4)
+        img = cv2.cvtColor(a, cv2.COLOR_RGBA2RGB if enc == 'rgba8' else cv2.COLOR_BGRA2RGB)
+    elif enc in ('yuv422', 'uyvy', 'yuyv', 'yuv422_yuy2'):
+        a = a.reshape(h, step)[:, :w * 2].reshape(h, w, 2)
+        img = cv2.cvtColor(a, cv2.COLOR_YUV2RGB_UYVY if enc in ('yuv422', 'uyvy') else cv2.COLOR_YUV2RGB_YUYV)
+    else:
+        raise ValueError(f'unsupported image encoding {enc}')
+    if rect is not None:
+        img = cv2.remap(img, rect[0], rect[1], cv2.INTER_LINEAR)
+    return img
+
+
+def camera_info_topic(image_topic):
+    return image_topic.rsplit('/', 1)[0] + '/camera_info'
+
+
+def camera_name(image_topic):
+    """/camera_pano_nn/image_rect_compressed, /camera_pano_nn/rgb/image_raw -> camera_pano_nn"""
+    ns = image_topic.rsplit('/', 1)[0]
+    return re.sub(r'/(rgb|color|image)$', '', ns).strip('/').replace('/', '_')
+
+
+def is_rectified(image_topic):
+    return next(r for s, _, r in IMAGE_TOPICS if image_topic.endswith(s))
+
+
+def rectify_maps(info):
+    """Undistort + rectify maps for an unrectified camera, onto the camera_info's P (the K stage 1 projects with)."""
+    w, h = int(info.width), int(info.height)
+    K0 = np.array(info.k, np.float64).reshape(3, 3)
+    D = np.array(info.d, np.float64)
+    Rr = np.array(info.r, np.float64).reshape(3, 3)
+    if np.abs(Rr).sum() == 0:
+        Rr = np.eye(3)
+    P = np.array(info.p, np.float64).reshape(3, 4)
+    Knew = P[:, :3] if np.abs(P).sum() > 0 else K0
+    if (info.distortion_model or '').lower() in ('equidistant', 'fisheye'):
+        return cv2.fisheye.initUndistortRectifyMap(K0, D[:4], Rr, Knew, (w, h), cv2.CV_16SC2)
+    return cv2.initUndistortRectifyMap(K0, D, Rr, Knew, (w, h), cv2.CV_16SC2)
 
 
 # --------------------------------------------------------------------------- camera labels on the ground
@@ -309,12 +380,36 @@ def pick_lidar(topics, wanted):
 
 
 def pick_cameras(topics, wanted):
+    """One image topic per camera (with a camera_info next to it): rectified JPEG first, then raw rectified, then raw
+    unrectified - skipping a rectified topic recorded at much lower rate than the camera's raw one.
+    wanted: comma list of camera names (camera_pano_nn) or exact image topics; names missing from the bag are skipped."""
+    cands = defaultdict(list)  # camera name -> [(rank, count, topic)]
+    for t, v in topics.items():
+        if v['count'] <= 0 or topics.get(camera_info_topic(t), {}).get('count', 0) <= 0:
+            continue
+        for rank, (suffix, typ, _) in enumerate(IMAGE_TOPICS):
+            if t.endswith(suffix) and v['type'].endswith('/' + typ) or t.endswith(suffix) and v['type'] == typ:
+                cands[camera_name(t)].append((rank, v['count'], t))
+                break
+    best = {}
+    for cam, opts in cands.items():
+        top = max(n for _, n, _ in opts)
+        best[cam] = min((o for o in opts if o[1] >= 0.7 * top), key=lambda o: o[0])[2]
     if wanted:
-        return [c if c.endswith(IMAGE_SUFFIX) else c.rstrip('/') + IMAGE_SUFFIX for c in wanted.split(',')]
-    cams = sorted(t for t, v in topics.items() if t.endswith(IMAGE_SUFFIX) and v['type'].endswith('CompressedImage')
-                  and v['count'] > 0 and t[:-len(IMAGE_SUFFIX)] + '/camera_info' in topics)
+        cams = []
+        for w in (s.strip() for s in wanted.split(',') if s.strip()):
+            if w in topics:
+                cams.append(w)
+            elif w.strip('/').replace('/', '_') in best:
+                cams.append(best[w.strip('/').replace('/', '_')])
+            elif camera_name(w) in best and w.endswith(IMAGE_SUFFIX):  # old style: /camera_pano_nn/image_rect_compressed
+                cams.append(best[camera_name(w)])
+            else:
+                print(f'  camera {w} is not in this bag - skipped', flush=True)
+    else:
+        cams = [best[c] for c in sorted(best)]
     if not cams:
-        sys.exit(f'No <camera>{IMAGE_SUFFIX} topics with a camera_info in the bag; pass --cameras')
+        sys.exit('No camera image topics (image_rect_compressed / image_rect / image_raw) with a camera_info; pass --cameras')
     return cams
 
 
@@ -345,18 +440,34 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--bag', required=True, help='.mcap file or rosbag2 directory')
     ap.add_argument('--out', required=True)
-    ap.add_argument('--cameras', default='', help='comma list of camera namespaces/topics (default: every '
-                    f'<ns>{IMAGE_SUFFIX} with a camera_info)')
+    ap.add_argument('--cameras', default='', help='comma list of camera names (camera_pano_nn) or image topics; '
+                    'names not in the bag are skipped (default: every camera with an image topic and a camera_info; '
+                    f'<cam>{IMAGE_SUFFIX} preferred, raw <cam>/image_rect / image_color / image_raw also read)')
+    ap.add_argument('--expect-cameras', type=int, help='fail if the bag does not have this many selected camera topics')
+    ap.add_argument('--no-inputs', action='store_true', help='skip camera/LiDAR input dumps; keep maps and front JPEGs')
     ap.add_argument('--lidar-topic', default='')
     ap.add_argument('--odom-topic', default='', help='ego pose topic, used when /tf has no world frame above '
                     '--base-frame (default: the Odometry topic with the most messages)')
-    ap.add_argument('--pose-source', choices=('auto', 'tf', 'odom'), default='auto')
+    ap.add_argument('--pose-source', choices=('auto', 'tf', 'odom', 'inspva'), default='auto',
+                    help='auto: GNSS Odometry topic, else NovAtel INSPVA (--inspva-topic) converted to UTM, else /tf, '
+                         'else any Odometry; inspva: always build the pose from INSPVA')
+    ap.add_argument('--inspva-topic', default='/novatel/oem7/inspva',
+                    help='novatel_oem7_msgs/INSPVA used when the bag has no /novatel/oem7/odom: lat/lon -> UTM, '
+                         'roll/pitch/azimuth -> orientation, exactly as the NovAtel driver builds its odom')
     ap.add_argument('--base-frame', default='base_link', help='vehicle frame the pose refers to')
     ap.add_argument('--ego-frame', default='auto', help='map centre (default: rear_axle if in TF, else --base-frame)')
+    ap.add_argument('--min-move', type=float, default=2.0, help='minimum XY distance between keyframes (m, 0 disables)')
+    ap.add_argument('--min-sweep-move', type=float, default=0.25,
+                    help='minimum XY distance from the last processed sweep for map-only sweeps (m, 0 disables)')
     ap.add_argument('--hz', type=float, default=2.0, help='keyframe rate (nuScenes keyframes are 2 Hz)')
     ap.add_argument('--map-hz', type=float, default=10.0,
                     help='rate at which LiDAR sweeps are labelled and accumulated into the map (>= --hz); '
                          'keyframes are still written at --hz. 2 = the original nuScenes recipe (keyframes only)')
+    ap.add_argument('--near-map', default='', help='Lanelet2 .osm: only label LiDAR sweeps / write keyframes while the '
+                    'ego is within --near-map-margin of one of its nodes (skips driving off the mapped roads; needs a '
+                    'UTM pose such as /novatel/oem7/odom or INSPVA)')
+    ap.add_argument('--near-map-margin', type=float, default=60.0,
+                    help='m; generous, so the map has built up before the ego reaches the mapped road (default 60)')
     ap.add_argument('--start', type=float, default=0.0, help='seconds to skip from the bag start')
     ap.add_argument('--duration', type=float, default=0.0, help='seconds to process (0 = all)')
     ap.add_argument('--max-frames', type=int, default=0)
@@ -385,14 +496,29 @@ def main():
     topics = list_topics(files)
     cams = pick_cameras(topics, args.cameras)
     lidar_topic = pick_lidar(topics, args.lidar_topic)
-    info_topics = {c[:-len(IMAGE_SUFFIX)] + '/camera_info': c for c in cams}
+    info_topics = {camera_info_topic(c): c for c in cams}
     odom_topic = pick_odom(topics, args.odom_topic)
+    # no georeferenced odometry (e.g. the NovAtel driver's odom was not running): build it from INSPVA
+    inspva = args.pose_source == 'inspva' or (args.pose_source == 'auto' and not (odom_topic and is_gnss(odom_topic))
+                                              and topics.get(args.inspva_topic, {}).get('count', 0) > 0)
+    if inspva:
+        odom_topic = args.inspva_topic
+        if args.pose_source == 'inspva':
+            args.pose_source = 'odom'
     print(f'Bag: {", ".join(f.name for f in files)}')
     print(f'Cameras ({len(cams)}): {", ".join(cams)}')
+    if args.expect_cameras is not None and len(cams) != args.expect_cameras:
+        ap.error(f'expected {args.expect_cameras} camera topics, found {len(cams)}')
+    raw_cams = [c for c in cams if not topics[c]['type'].endswith('CompressedImage')]
+    if raw_cams:
+        print(f'  raw images, decoded{" and undistorted" if any(not is_rectified(c) for c in raw_cams) else ""}: '
+              f'{", ".join(raw_cams)}', flush=True)
+    if inspva:
+        print(f'  pose from {args.inspva_topic} (lat/lon -> UTM, as the NovAtel driver\'s odom)', flush=True)
     print(f'LiDAR: {lidar_topic}   odometry fallback: {odom_topic}', flush=True)
 
     out = Path(args.out)
-    for d in ('maps', 'cams', 'inputs'):
+    for d in ('maps', 'cams') if args.no_inputs else ('maps', 'cams', 'inputs'):
         (out / d).mkdir(parents=True, exist_ok=True)
 
     cfg = make_cfg(args)
@@ -404,7 +530,21 @@ def main():
     odom = TfBuffer()   # odometry topic poses, kept apart so they never clash with the static tree
     odom_child = None
     infos = {}  # camera topic -> (K 3x3, (w, h))
-    images = defaultdict(lambda: deque(maxlen=60))  # camera topic -> (stamp, frame_id, jpeg bytes)
+    images = defaultdict(lambda: deque(maxlen=60))  # camera topic -> (stamp, frame_id, jpeg bytes | raw tuple)
+    for c in raw_cams:  # uncompressed frames are MBs each: keep about a second of them
+        images[c] = deque(maxlen=20)
+    rect = {}  # unrectified camera topic -> undistortion maps
+    to_utm = None
+    near_map = None
+    if args.near_map:  # only map where the ego is near a road of this Lanelet2 map (pose must be UTM, e.g. NovAtel)
+        import xml.etree.ElementTree as ET
+        from pyproj import Transformer
+        from scipy.spatial import cKDTree
+        ll = np.array([(float(n.get('lon')), float(n.get('lat'))) for n in ET.parse(args.near_map).getroot().iter('node')])
+        zone = int((ll[:, 0].mean() + 180) // 6) + 1
+        xy = Transformer.from_crs(4326, (32600 if ll[:, 1].mean() >= 0 else 32700) + zone, always_xy=True).transform(ll[:, 0], ll[:, 1])
+        near_map = cKDTree(np.stack(xy, 1))
+        print(f'  mapping only within {args.near_map_margin:g} m of {Path(args.near_map).name} ({len(ll)} nodes, UTM zone {zone})', flush=True)
     last_cam_stamp = defaultdict(int)
     pending = deque()  # (stamp, frame_id, pcd) keyframes waiting for cameras and pose
     state = dict(pose_source=None, ego_frame=None, ground_frame=None)
@@ -429,6 +569,8 @@ def main():
     last_map = -map_period
     t0 = None
     last_key = -period
+    last_key_xy = last_sweep_xy = None
+    queued_keyframes = 0
     origin = None
     front_cam = None
     frames = []
@@ -495,13 +637,23 @@ def main():
         """Main thread: poses + TF (the TF buffers are filled by this thread) and HRNet on the GPU (the CUDA
         context lives here). JPEG decode / pre- and post-processing run in `pool`, and everything after
         segmentation runs in the ordered `mapper` thread, so the GPU segments sweep N+1 while sweep N is mapped."""
-        nonlocal origin, front_cam
+        nonlocal origin, front_cam, last_key_xy, last_sweep_xy, queued_keyframes
         # only map with a measured pose: interpolating across a pose dropout (NovAtel has ~10 s gaps in some
         # bags) would put the points, and the ground truth patch, metres away from where they belong
         if pose_gap_ns(stamp) > args.max_pose_gap * 1e9:
             n_skipped['pose dropout (keyframes)' if key else 'pose dropout (map-only sweeps)'] += 1
             return
         T_map_ego = world_T(ego_frame(), stamp)
+        if near_map is not None and near_map.query(T_map_ego[:2, 3])[0] > args.near_map_margin:
+            n_skipped['off the --near-map map (keyframes)' if key else 'off the --near-map map (map-only sweeps)'] += 1
+            return
+        xy = T_map_ego[:2, 3].copy()  # preserve map-frame coordinates before subtracting origin
+        if key and last_key_xy is not None and np.linalg.norm(xy - last_key_xy) < args.min_move:
+            key = False
+            n_skipped['keyframe demoted: moved < --min-move'] += 1
+        if not key and last_sweep_xy is not None and np.linalg.norm(xy - last_sweep_xy) < args.min_sweep_move:
+            n_skipped['stationary sweep (skipped)'] += 1
+            return
         T_map_lidar = world_T(lidar_frame, stamp)
         if origin is None:  # keep map coordinates small: start the map frame at the first pose
             origin = T_map_ego[:3, 3].copy()
@@ -519,7 +671,7 @@ def main():
             except KeyError:
                 n_skipped[f'no TF {frame_id}->{lidar_frame}'] += 1
                 continue
-            jobs[c] = (T_cam_lidar, frame_id, pool.submit(seg.decode_pre, data))
+            jobs[c] = (T_cam_lidar, frame_id, pool.submit(seg.decode_pre, data, rect.get(c)))
         if not jobs:
             return
         if front_cam is None:  # camera whose optical axis points most along the ego's +x
@@ -540,7 +692,13 @@ def main():
                 continue
             labels = seg.infer(x)  # GPU
             ctx['cams'][c] = (img, pool.submit(seg.post, labels, img.shape))
+        if not ctx['cams']:
+            return
         map_jobs.append(mapper.submit(map_step, ctx))
+        last_sweep_xy = xy
+        if key:
+            last_key_xy = xy
+            queued_keyframes += 1
         while len(map_jobs) > 2:  # bound memory, and surface errors from the mapping thread
             map_jobs.popleft().result()
 
@@ -594,25 +752,30 @@ def main():
 
         idx = len(frames)
         # same convention as save_semantic_image(..., RGB2BGR=True) in nusc_semantic_mapping.py
-        cv2.imwrite(str(out / 'maps' / f'{idx:06d}.png'), cv2.cvtColor(map_rendered.astype(np.uint8), cv2.COLOR_BGR2RGB))
+        png = out / 'maps' / f'{idx:06d}.png'
+        tmp_png = png.with_suffix('.tmp.png')
+        if not cv2.imwrite(str(tmp_png), cv2.cvtColor(map_rendered.astype(np.uint8), cv2.COLOR_BGR2RGB)):
+            raise OSError(f'could not write {png}')
+        tmp_png.replace(png)
         rec = dict(idx=idx, stamp_ns=stamp, map=f'maps/{idx:06d}.png', fps=args.hz, cams=len(used),
                    pose=[round(float(T_map_ego[0, 3]), 3), round(float(T_map_ego[1, 3]), 3),
                          round(float(np.arctan2(T_map_ego[1, 0], T_map_ego[0, 0])), 5)])
         # the raw inputs of this keyframe, for tools/mcap_compare_viz.py: every camera image, and the LiDAR sweep
         # in the ego frame (x fwd, y left, z up, intensity) cropped to the map area
-        inp = dict(cams={})
-        for c, im in raw_imgs.items():
-            name = c[:-len(IMAGE_SUFFIX)].strip('/').replace('/', '_')
-            small = cv2.resize(cv2.cvtColor(im, cv2.COLOR_RGB2BGR), (480, int(480 * im.shape[0] / im.shape[1])),
-                               interpolation=cv2.INTER_AREA)
-            cv2.imwrite(str(out / 'inputs' / f'{idx:06d}_{name}.jpg'), small, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            inp['cams'][c] = f'inputs/{idx:06d}_{name}.jpg'
-        T_ego_lidar = np.linalg.inv(T_map_ego) @ T_map_lidar
-        pts = (T_ego_lidar[:3, :3] @ pcd[:3] + T_ego_lidar[:3, 3:4])
-        keep = (np.abs(pts[0]) < 32) & (np.abs(pts[1]) < 17)
-        np.save(out / 'inputs' / f'{idx:06d}_lidar.npy', np.vstack([pts[:, keep], pcd[3:4, keep]]).T.astype(np.float16))
-        inp['lidar'] = f'inputs/{idx:06d}_lidar.npy'
-        rec['inputs'] = inp
+        if not args.no_inputs:
+            inp = dict(cams={})
+            for c, im in raw_imgs.items():
+                name = camera_name(c)
+                small = cv2.resize(cv2.cvtColor(im, cv2.COLOR_RGB2BGR), (480, int(480 * im.shape[0] / im.shape[1])),
+                                   interpolation=cv2.INTER_AREA)
+                cv2.imwrite(str(out / 'inputs' / f'{idx:06d}_{name}.jpg'), small, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                inp['cams'][c] = f'inputs/{idx:06d}_{name}.jpg'
+            T_ego_lidar = np.linalg.inv(T_map_ego) @ T_map_lidar
+            pts = (T_ego_lidar[:3, :3] @ pcd[:3] + T_ego_lidar[:3, 3:4])
+            keep = (np.abs(pts[0]) < 32) & (np.abs(pts[1]) < 17)
+            np.save(out / 'inputs' / f'{idx:06d}_lidar.npy', np.vstack([pts[:, keep], pcd[3:4, keep]]).T.astype(np.float16))
+            inp['lidar'] = f'inputs/{idx:06d}_lidar.npy'
+            rec['inputs'] = inp
         if front is not None:
             f = cv2.cvtColor(front, cv2.COLOR_RGB2BGR)
             f = cv2.resize(f, (640, int(640 * f.shape[0] / f.shape[1])), interpolation=cv2.INTER_AREA)
@@ -653,7 +816,7 @@ def main():
                 n_skipped[f'no TF {args.base_frame}->{lf}'] += 1
                 continue
             process(stamp, lf, pcd, snap, key)
-            if args.max_frames and len(frames) >= args.max_frames:
+            if args.max_frames and queued_keyframes >= args.max_frames:
                 return True
         return False
 
@@ -688,6 +851,7 @@ def main():
 
     producer = threading.Thread(target=produce, daemon=True)
     producer.start()
+    last_progress = time.monotonic()
     while True:
         item = msg_q.get()
         if item is None:
@@ -699,6 +863,21 @@ def main():
             for tr in ros.transforms:
                 tf.add(tr.header.frame_id, tr.child_frame_id, stamp_ns(tr.header),
                        tf_matrix(tr.transform.translation, tr.transform.rotation), static=topic == '/tf_static')
+            continue
+        if topic == odom_topic and inspva:
+            if ros.latitude == 0 and ros.longitude == 0:
+                continue  # no solution yet
+            if to_utm is None:
+                from pyproj import Transformer
+                zone = int((ros.longitude + 180) // 6) + 1
+                to_utm = Transformer.from_crs(4326, (32600 if ros.latitude >= 0 else 32700) + zone, always_xy=True)
+            x, y = to_utm.transform(ros.longitude, ros.latitude)
+            # novatel_oem7_driver odometry: setRPY(roll, -pitch, 90 deg - azimuth), position = INS solution point
+            T = np.eye(4)
+            T[:3, :3] = Rotation.from_euler('ZYX', [90.0 - ros.azimuth, -ros.pitch, ros.roll], degrees=True).as_matrix()
+            T[:3, 3] = [x, y, ros.height]
+            odom_child = args.base_frame
+            odom.add('odom', odom_child, stamp_ns(ros.header), T)
             continue
         if topic == odom_topic:
             odom_child = (ros.child_frame_id or args.base_frame).lstrip('/')
@@ -712,12 +891,18 @@ def main():
                 P = np.array(ros.p, np.float64).reshape(3, 4)
                 K = P[:, :3] if np.abs(P).sum() > 0 else np.array(ros.k, np.float64).reshape(3, 3)
                 infos[c] = (K, (int(ros.width), int(ros.height)))
+                if not is_rectified(c):
+                    rect[c] = rectify_maps(ros)
             continue
         stamp = stamp_ns(ros.header)
         if t0 is None:
             t0 = stamp
         if topic == lidar_topic:
             rel = (stamp - t0) / 1e9
+            now = time.monotonic()
+            if now - last_progress >= 5:
+                print(f'  scan t+{rel:.1f}s', flush=True)
+                last_progress = now
             if rel < args.start or stamp - last_map < 0.9 * map_period:
                 continue
             if args.duration and rel > args.start + args.duration:
@@ -728,7 +913,9 @@ def main():
                 last_key = stamp
             pending.append([stamp, ros.header.frame_id, read_pointcloud2(ros), None, key])
         else:  # camera image
-            images[topic].append((stamp, ros.header.frame_id, ros.data))
+            data = ros.data if topic not in raw_cams else \
+                ('raw', ros.encoding, int(ros.height), int(ros.width), int(ros.step), ros.data)
+            images[topic].append((stamp, ros.header.frame_id, data))
             last_cam_stamp[topic] = max(last_cam_stamp[topic], stamp)
         if drain():
             break
@@ -738,7 +925,8 @@ def main():
             msg_q.get(timeout=0.1)
         except queue.Empty:
             pass
-    drain(force=True)
+    if not args.max_frames or queued_keyframes < args.max_frames:
+        drain(force=True)
     for j in map_jobs:
         j.result()
     pool.shutdown()

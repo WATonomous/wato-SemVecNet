@@ -1,0 +1,10 @@
+# Plan B: six training splits and two held-out test splits. Paths are relative to the shared Drive Bags folder.
+# Use all available camera topics for the native six-camera recordings; do not downsample any eight-camera drive.
+May_30_ring_road_rosbags/may_30_ring_road_test_2/may_30_ring_road_test_2_0.mcap all --expect-cameras 6 --map-hz 5 --near-map
+May_30_ring_road_rosbags/may_30_ring_road_test_5/may_30_ring_road_test_5_1.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map
+recording_20260217_224728/recording_20260217_224728_0.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map
+eidos/recording_20260217_224728_1_with_eidos.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map
+Bags_Perception_Specific/pano_lidar_cc_20261029_190612/pano_lidar_cc_20261029_190612_1.mcap all --expect-cameras 6 --map-hz 5 --near-map
+Bags_Perception_Specific/pano_lidar_cc_20261029_190612/pano_lidar_cc_20261029_190612_2.mcap all --expect-cameras 6 --map-hz 5 --near-map
+recording_20260224_213947/recording_20260224_213947_0.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map
+recording_20260224_213947/recording_20260224_213947_1.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map
