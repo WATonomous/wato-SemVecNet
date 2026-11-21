@@ -1,4 +1,5 @@
 /*.sh
+!/run_mcap_pipeline.sh
 change_submit.py
 cluster_submit.yaml
 

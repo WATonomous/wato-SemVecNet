@@ -1,0 +1,62 @@
+{
+  "scene-0061-19.png": {
+    "divider": 4,
+    "ped_crossing": 2,
+    "boundary": 20,
+    "centerline": 33
+  },
+  "scene-0103-20.png": {
+    "divider": 7,
+    "ped_crossing": 2,
+    "boundary": 8,
+    "centerline": 6
+  },
+  "scene-0553-20.png": {
+    "divider": 5,
+    "ped_crossing": 6,
+    "boundary": 16,
+    "centerline": 25
+  },
+  "scene-0655-20.png": {
+    "divider": 7,
+    "ped_crossing": 1,
+    "boundary": 13,
+    "centerline": 7
+  },
+  "scene-0757-20.png": {
+    "divider": 5,
+    "ped_crossing": 3,
+    "boundary": 8,
+    "centerline": 14
+  },
+  "scene-0796-20.png": {
+    "divider": 4,
+    "ped_crossing": 0,
+    "boundary": 7,
+    "centerline": 10
+  },
+  "scene-0916-20.png": {
+    "divider": 2,
+    "ped_crossing": 0,
+    "boundary": 8,
+    "centerline": 3
+  },
+  "scene-1077-20.png": {
+    "divider": 6,
+    "ped_crossing": 0,
+    "boundary": 7,
+    "centerline": 7
+  },
+  "scene-1094-20.png": {
+    "divider": 4,
+    "ped_crossing": 2,
+    "boundary": 7,
+    "centerline": 9
+  },
+  "scene-1100-20.png": {
+    "divider": 6,
+    "ped_crossing": 1,
+    "boundary": 12,
+    "centerline": 23
+  }
+}
