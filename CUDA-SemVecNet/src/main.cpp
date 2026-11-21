@@ -84,21 +84,24 @@ int main(int argc, char **argv)
   std::cout << "✅ Engine loaded successfully!" << std::endl;
   std::cout << "   Device Memory: " << (engine->getDeviceMemorySizeV2() / 1024.0) << " KB" << std::endl;
   std::cout << "   I/O Tensors: " << engine->getNbIOTensors() << std::endl;
-  
+
   // Show tensor info
-  for (int i = 0; i < engine->getNbIOTensors(); ++i) {
-    const char* name = engine->getIOTensorName(i);
+  for (int i = 0; i < engine->getNbIOTensors(); ++i)
+  {
+    const char *name = engine->getIOTensorName(i);
     nvinfer1::Dims dims = engine->getTensorShape(name);
     bool isInput = (engine->getTensorIOMode(name) == nvinfer1::TensorIOMode::kINPUT);
     std::cout << "   [" << i << "] " << name << " (" << (isInput ? "INPUT" : "OUTPUT") << ") ";
     std::cout << "shape=(";
-    for (int j = 0; j < dims.nbDims; ++j) {
+    for (int j = 0; j < dims.nbDims; ++j)
+    {
       std::cout << dims.d[j];
-      if (j < dims.nbDims - 1) std::cout << ", ";
+      if (j < dims.nbDims - 1)
+        std::cout << ", ";
     }
     std::cout << ")" << std::endl;
   }
-  
+
   delete engine;
   std::cout << "\n🎉 All tests passed!" << std::endl;
 

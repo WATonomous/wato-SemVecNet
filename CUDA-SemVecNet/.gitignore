@@ -5,6 +5,7 @@ model/*.onnx
 model/*.engine
 model/*.json
 model/*.log
+/models/*.onnx
 # CUDA/TensorRT headers copied from the docker image for IntelliSense (tool/sync_headers.sh)
 .sysroot/
 .clangd

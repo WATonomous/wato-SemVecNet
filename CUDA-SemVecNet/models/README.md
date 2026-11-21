@@ -1,5 +1,9 @@
 # Models Directory
 
+The three ONNX models in this directory run directly in ONNX Runtime. See
+[ONNX inference and pipeline notes](../docs/onnx_inference.md) for model inputs,
+outputs, export steps, and where CUDA kernels might help.
+
 ## TensorRT Version Compatibility Issue
 
 **Problem:** `.plan` files are NOT portable across TensorRT versions.
