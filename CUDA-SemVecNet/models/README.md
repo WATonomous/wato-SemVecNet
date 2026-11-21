@@ -45,5 +45,6 @@ import tensorrt as trt
 
 ## For Testing
 
-`loadRuntime()` in `src/common/common.cpp` deserializes a TensorRT engine.
+`TensorRtEngine::load()` in `src/common/common.cpp` deserializes a TensorRT engine and
+returns an owner that keeps its runtime alive.
 The engine must be compatible with the TensorRT version and GPU in use.

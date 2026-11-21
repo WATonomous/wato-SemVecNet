@@ -1,6 +1,7 @@
 #include "semvecnet/semvecnet.hpp"
 
 #include "semvecnet/camera-preprocessing.hpp"
+#include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/lidar-preprocessing.hpp"
 
 #include <stdexcept>
@@ -23,6 +24,12 @@ void forward(const unsigned char *const *camera_images,
   PreparedFrame prepared = {
       camera.forward(camera_images, num_cameras, image_width, image_height),
       lidar.forward(lidar_points, num_points)};
+
+  auto engine = TensorRtEngine::load("model/hrnet_ocrnet_mapillary.plan");
+  if (!engine)
+    throw std::runtime_error("Failed to initialize HRNet engine and context");
+
+  std::vector<std::vector<int64_t>> masks = hrnet::forward(*engine.context(), prepared.hrnet_images);
 }
 
 } // namespace semvecnet

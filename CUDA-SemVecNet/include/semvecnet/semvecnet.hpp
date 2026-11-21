@@ -4,6 +4,9 @@
 
 #include <array>
 #include <vector>
+#include <NvInfer.h>
+
+#include "common/common.hpp"
 
 namespace semvecnet {
 

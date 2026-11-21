@@ -2,7 +2,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <iterator>
 #include <vector>
 
 namespace {
@@ -14,36 +13,47 @@ class Logger : public nvinfer1::ILogger {
   }
 };
 
-Logger gLogger;
-
 } // namespace
 
-nvinfer1::ICudaEngine *loadRuntime(const std::string &filePath) {
-  std::ifstream file(filePath, std::ios::binary);
+TensorRtEngine TensorRtEngine::load(const std::string &filePath) {
+  std::ifstream file(filePath, std::ios::binary | std::ios::ate);
   if (!file.good()) {
     std::cerr << "Failed to open " << filePath << std::endl;
-    return nullptr;
+    return {};
   }
 
-  std::vector<char> data((std::istreambuf_iterator<char>(file)),
-                         std::istreambuf_iterator<char>());
-  file.close();
+  const auto size = file.tellg();
+  if (size <= 0) {
+    std::cerr << "Empty or unreadable TensorRT plan: " << filePath << '\n';
+    return {};
+  }
+  std::vector<char> data(static_cast<std::size_t>(size));
+  if (!file.seekg(0) ||
+      !file.read(data.data(), static_cast<std::streamsize>(data.size()))) {
+    std::cerr << "Failed to read TensorRT plan: " << filePath << '\n';
+    return {};
+  }
 
-  nvinfer1::IRuntime *runtime = nvinfer1::createInferRuntime(gLogger);
-  if (!runtime) {
+  static Logger logger;
+  TensorRtEngine loaded;
+  loaded.runtime_.reset(nvinfer1::createInferRuntime(logger));
+  if (!loaded.runtime_) {
     std::cerr << "Failed to create runtime" << std::endl;
-    return nullptr;
+    return {};
   }
 
-  nvinfer1::ICudaEngine *engine =
-      runtime->deserializeCudaEngine(data.data(), data.size());
-  if (!engine) {
-    std::cerr << "Failed to deserialize engine" << std::endl;
-    delete runtime;
-    return nullptr;
+  loaded.engine_.reset(
+      loaded.runtime_->deserializeCudaEngine(data.data(), data.size()));
+  if (!loaded.engine_) {
+    std::cerr << "Failed to deserialize TensorRT plan: " << filePath << '\n';
+    return {};
   }
 
-  // The runtime must outlive the engine. The current raw-pointer API does
-  // not give the caller a way to release the runtime after destroying it.
-  return engine;
+  loaded.context_.reset(loaded.engine_->createExecutionContext());
+  if (!loaded) {
+    std::cerr << "Failed to create TensorRT execution context: " << filePath
+              << '\n';
+    return {};
+  }
+  return loaded;
 }

@@ -16,7 +16,8 @@
   "[cpp][cuda-cpp]": {
     "editor.tabSize": 2,
     "editor.insertSpaces": true,
-    "editor.detectIndentation": false
+    "editor.detectIndentation": false,
+    "editor.wordWrap": "off"
   },
   "files.associations": {
     "*.cu": "cuda-cpp",
