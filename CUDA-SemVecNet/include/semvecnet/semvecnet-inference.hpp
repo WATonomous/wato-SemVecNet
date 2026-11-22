@@ -1,15 +1,12 @@
 #pragma once
 
+#include "semvecnet/semantic-map-input.hpp"
+
 #include <onnxruntime_cxx_api.h>
 #include <string>
 #include <vector>
 
 namespace semvecnet::model {
-
-struct SemanticMapInput {
-  // Normalized FP32 RGB, NCHW [1, 3, 300, 150].
-  std::vector<float> values;
-};
 
 struct DecoderOutput {
   std::vector<float> class_logits;      // [1, 70, 4]

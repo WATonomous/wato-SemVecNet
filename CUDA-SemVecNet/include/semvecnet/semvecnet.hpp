@@ -12,6 +12,7 @@
 #include "semvecnet/lidar-semantic-projection.hpp"
 #include "semvecnet/polyline-postprocessing.hpp"
 #include "semvecnet/semantic-bev-mapping.hpp"
+#include "semvecnet/semantic-map-renderer.hpp"
 #include "semvecnet/semvecnet-inference.hpp"
 
 namespace semvecnet {
@@ -24,11 +25,7 @@ struct PreparedFrame {
   std::vector<std::array<float, 5>> lidar_points;
 };
 
-struct ForwardResult {
-  std::vector<semantic_projection::LabeledPoint> labeled_points;
-  model::DecoderOutput predictions;
-  std::vector<postprocessing::Polyline> polylines;
-};
+using Polylines = std::vector<postprocessing::Polyline>;
 
 // One instance owns the inference sessions and persistent mapper across frames.
 class SemVecNet {
@@ -38,17 +35,19 @@ public:
 
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
   // five FP16 values per LiDAR point. Calibrations follow camera order and
-  // use mask-sized intrinsics; lidar_to_map is a row-major 4x4 transform.
-  ForwardResult
+  // use mask-sized intrinsics; poses are row-major 4x4 transforms into map coordinates.
+  Polylines
   forward(const unsigned char *const *camera_images,
           const nvtype::half *lidar_points, int num_points, int num_cameras,
           int image_width, int image_height,
           const std::vector<semantic_projection::CameraCalibration> &calibrations,
-          const std::array<float, 16> &lidar_to_map);
+          const std::array<float, 16> &lidar_to_map,
+          const std::array<float, 16> &ego_to_map);
 
 private:
   TensorRtEngine hrnet_engine_;
   bev_mapping::Mapper mapper_;
+  semantic_map::Renderer renderer_;
   model::Model model_;
   postprocessing::Postprocessor postprocessor_;
 };

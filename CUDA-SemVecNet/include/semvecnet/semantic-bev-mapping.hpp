@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <utility>
 #include <vector>
 
@@ -29,44 +30,32 @@ struct Grid {
 class Mapper {
 public:
   const Grid &grid() const { return grid_; }
-  void setGrid(Grid grid) { grid_ = std::move(grid); }
+  // Replacing the active grid clears saved tiles; dimensions must match the configured tile layout.
+  void setGrid(Grid grid) { grid_ = std::move(grid); tiles_.clear(); }
 
   // Updates the map using LiDAR points and their camera-label associations.
   // lidar_to_map is a row-major 4x4 transform from LiDAR to map coordinates.
-  void forward(const std::vector<std::array<float, 5>> &lidar_points,
-               const std::vector<semantic_projection::LabeledPoint> &labeled_points,
+  // Keeps evidence in active and inactive tiles as the vehicle moves.
+  // Expects a valid grid, finite transform, and in-range association indices.
+  void forward(const std::vector<std::array<float, 5>> &lidar_points, const std::vector<semantic_projection::LabeledPoint> &labeled_points,
                const std::array<float, 16> &lidar_to_map);
 
 private:
   using Origin = std::array<float, 2>;
-  // Half-open cell ranges: {{x_begin, x_end}, {y_begin, y_end}}.
-  using TileBoundary = std::array<std::array<std::size_t, 2>, 2>;
+  using TileKey = std::pair<int, int>;
 
-  // Python DynamicMap::check_map_origin / get_origin.
+  // Initialize the map origin and calculate tile-aligned origins.
   void checkMapOrigin(const std::array<float, 16> &lidar_to_map);
   Origin getOrigin(const Origin &position) const;
 
-  // Python init_map / need_update / update_map_origin.
-  void initMap(const Origin &origin);
-  bool needUpdate(const Origin &origin) const;
+  // Save active tiles and load the tiles around the new origin.
   void updateMapOrigin(const Origin &origin);
 
-  // Python tile-coordinate and tile-state helpers.
-  Origin getTileOrigin(std::size_t x, std::size_t y, const Origin &map_origin) const;
-  TileBoundary getTileBoundary(std::size_t x, std::size_t y) const;
-  bool tileExists(const Origin &tile_origin) const;
-  bool tileIsActive(const Origin &tile_origin, const Origin &map_origin) const;
-
-  // Python merge_color, adapted to HRNet class IDs instead of RGB colors.
-  // Returns a BEV class index, or -1 for a class that is not mapped.
+  // Map an HRNet class ID to a BEV class index, or -1 if it is not mapped.
   int remapClass(std::int64_t class_id) const;
 
-  // Python update_map: transform points, find cells, and update evidence.
-  void updateMap(const std::vector<std::array<float, 5>> &lidar_points,
-                 const std::vector<semantic_projection::LabeledPoint> &labeled_points,
-                 const std::array<float, 16> &lidar_to_map);
-
   Grid grid_;
+  std::map<TileKey, std::vector<float>> tiles_;
 };
 
 } // namespace semvecnet::bev_mapping

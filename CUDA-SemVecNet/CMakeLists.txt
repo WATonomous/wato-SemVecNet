@@ -121,6 +121,12 @@ if(BUILD_TESTING AND SEMVECNET_CORE_SOURCES)
   add_executable(test_polyline_postprocessing tests/polyline_postprocessing.cpp)
   target_link_libraries(test_polyline_postprocessing PRIVATE semvecnet_core)
   add_test(NAME polyline_postprocessing COMMAND test_polyline_postprocessing)
+  add_executable(test_semantic_bev_mapping tests/semantic_bev_mapping.cpp)
+  target_link_libraries(test_semantic_bev_mapping PRIVATE semvecnet_core)
+  add_test(NAME semantic_bev_mapping COMMAND test_semantic_bev_mapping)
+  add_executable(test_semantic_map_renderer tests/semantic_map_renderer.cpp)
+  target_link_libraries(test_semantic_map_renderer PRIVATE semvecnet_core)
+  add_test(NAME semantic_map_renderer COMMAND test_semantic_map_renderer)
 endif()
 
 # ----------------------------- install / export ----------------------------

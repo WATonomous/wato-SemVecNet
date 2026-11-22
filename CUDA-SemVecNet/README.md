@@ -78,6 +78,11 @@ A `.plan` only works with the TensorRT version and GPU it was built on.
 
 See `../integration/README.md` for linking into `wato_monorepo`.
 
+`SemVecNet::forward` takes both `lidar_to_map` and `ego_to_map` row-major 4x4
+poses. The mapper uses the LiDAR pose to place points; the renderer uses the
+ego pose to orient and center the model input. They may differ when the LiDAR
+is offset from the vehicle's ego frame.
+
 ## Docker image
 
 ```

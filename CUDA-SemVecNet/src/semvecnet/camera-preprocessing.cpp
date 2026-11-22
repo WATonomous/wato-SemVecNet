@@ -20,7 +20,7 @@ std::vector<float> prepareImage(const unsigned char *rgb, int width,
   cv::resize(image, resized, cv::Size(kHrnetWidth, kHrnetHeight), 0, 0,
              cv::INTER_AREA);
 
-  // Same order as Python: resize RGB8, then (FP32 / 255 - mean) / std.
+  // Resize RGB8, then normalize each FP32 channel with (value / 255 - mean) / std.
   cv::Mat normalized;
   resized.convertTo(normalized, CV_32F);
   cv::divide(normalized, cv::Scalar::all(255.0), normalized);
