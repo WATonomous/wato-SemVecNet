@@ -2,7 +2,10 @@
 # Fine-tune SemVecNet (ResNet-50 encoder + MapTRv2 decoder) on the Ring Road dataset, on the WATcloud SLURM
 # cluster, in one command from a login node:
 #
-#   ./fine-tune.sh [extra sbatch options, e.g. --gres shard:rtx_3090:16384,tmpdisk:102400]
+#   ./fine-tune.sh [extra sbatch options, e.g. --time=1-00:00:00]
+#
+# GPU: RTX 3090 only. The SemVecNet image (NGC PyTorch 21.10, CUDA 11.4) cannot initialise CUDA on the
+# RTX 4090 node (trpro-slurm2, driver 580: cuInit returns 999 "unknown error"), while it works on the 3090 nodes.
 #   EPOCHS=60 BATCH=4 LR=1e-4 ./fine-tune.sh      # hyperparameter overrides
 #   ./fine-tune.sh --local                         # run the job body here (local Docker + GPU), no SLURM
 #
@@ -26,7 +29,7 @@
 #SBATCH --job-name=semvecnet-finetune
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
-#SBATCH --gres=shard:16384,tmpdisk:102400
+#SBATCH --gres=shard:rtx_3090:16384,tmpdisk:102400
 #SBATCH --time=12:00:00
 set -euo pipefail
 
@@ -141,7 +144,7 @@ for c in "${CANDIDATES[@]}"; do
     echo "  --gpus $c: ${r:-no output}"
     if [[ "$r" == OK* ]]; then GPUS="$c"; break; fi
 done
-[ -n "$GPUS" ] || { echo "ERROR: PyTorch cannot use any GPU inside Docker (see above)" >&2; ls -l /dev/nvidia* >&2 || true; exit 1; }
+[ -n "$GPUS" ] || { echo "ERROR: PyTorch cannot use any GPU inside Docker (see above). The SemVecNet image needs an RTX 3090 (--gres shard:rtx_3090:16384,tmpdisk:102400)" >&2; ls -l /dev/nvidia* >&2 || true; exit 1; }
 echo "  using --gpus $GPUS"
 
 step "Fine-tuning (EPOCHS=${EPOCHS:-40} BATCH=${BATCH:-4} LR=${LR:-1e-4} AUGMENT=${AUGMENT:-1}) -> $OUT"
