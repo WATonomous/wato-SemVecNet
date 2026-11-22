@@ -48,3 +48,29 @@ ssh -N -L 8765:127.0.0.1:8765 user@server
 - `dataset/previews/train/` and `dataset/previews/test/` contain semantic maps with ground-truth vectors drawn on top. `dataset/` is the directory to mount at `/data/ringroad` when fine-tuning.
 
 The preview server listens only on server loopback and shuts down when the script exits. To browse the outputs later over the same SSH tunnel, run `python3 -m http.server 8765 --bind 127.0.0.1 --directory "$HOME/semvecnet-phase1/outputs"` on the server. Use `--preview-port 0` to turn off previews during the run.
+
+## Fine-tune on WATcloud
+
+Place the exported dataset at `~/ringroad_dataset_large`, with
+`train/train.pkl`, `test/test.pkl` and the corresponding maps. From the login
+node, run `./fine-tune.sh`. Extra arguments are passed to sbatch. The launcher
+follows `logs/finetune-<job>.out`. Ctrl-C leaves the submitted job running.
+
+The job starts from `SemVecNet/ckpts/mAP_epoch_99.pth` and fetches it with the
+configured rclone `gdrive:` remote if missing. Set `SEMVECNET_DATASET` or
+`SEMVECNET_CKPT` to use different inputs. Defaults are 40 epochs, batch size 4,
+4 loader workers and AdamW at 0.0001. For example, `BATCH=2 EPOCHS=10 ./fine-tune.sh`
+reduces the batch size and duration. Set `AUGMENT=0` to disable training flips,
+rotations and translations. Evaluation always uses the original maps.
+
+Epoch 0 measures the starting weights. During training, `[TRAIN]` reports loss,
+learning rate and time left in the epoch. Each `[SUMMARY]` gives mean training
+loss, Chamfer mAP on the same 150 training maps (or all if smaller), full test
+mAP and the four test class APs averaged over 0.5, 1.0 and 1.5 metres.
+
+Results go to `~/semvecnet-finetune/<job-id>/`. Set `SEMVECNET_FT_OUT` to
+select a fresh output directory. It contains the two ground-truth JSON caches,
+`metrics.csv`, `metrics.json`, and weights-only `latest.pth` and `best.pth`.
+At completion `ringroad_finetuned.pth` is a hard link to the highest-test-mAP
+checkpoint, including epoch 0 if fine-tuning never improves it. Pass this file
+as the checkpoint for `tools/mcap_infer_semvecnet.py`.

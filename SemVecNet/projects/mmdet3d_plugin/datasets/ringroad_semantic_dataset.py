@@ -11,11 +11,26 @@ import numpy as np
 from mmdet.datasets import DATASETS
 from nuscenes.eval.common.utils import Quaternion
 
+from .ringroad_augmentation import RingRoadAffine
 from .nuscenes_offlinemap_dataset import CustomNuScenesOfflineLocalSemanticMapDataset
 
 
 @DATASETS.register_module()
 class RingRoadSemanticMapDataset(CustomNuScenesOfflineLocalSemanticMapDataset):
+
+    def __init__(self, pipeline, augment=False, **kwargs):
+        if augment and not kwargs.get('test_mode', False):
+            pipeline = list(pipeline)
+            normalize = next(i for i, step in enumerate(pipeline) if step['type'] == 'NormalizeSemanticMap')
+            pipeline.insert(normalize, RingRoadAffine())
+        super().__init__(pipeline=pipeline, **kwargs)
+
+    def prepare_test_data(self, index):
+        example = super().prepare_test_data(index)
+        # MapTRv2.forward_test unwraps the augmentation dimension on metadata
+        # while accepting the batched semantic tensor directly.
+        example['img_metas'] = [example['img_metas']]
+        return example
 
     def get_data_info(self, index):
         info = self.data_infos[index]
