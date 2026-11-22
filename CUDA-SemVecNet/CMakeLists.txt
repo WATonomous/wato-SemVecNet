@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW)  # Honor ONNXRUNTIME_ROOT in find_package.
+endif()
+
 # GPU architecture. Same env var as wato-cuda-bevfusion (CUDASM=86 -> sm_86).
 # 86 = RTX 30xx, 89 = RTX 40xx. Override: -DCMAKE_CUDA_ARCHITECTURES=... or CUDASM=...
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
@@ -54,10 +58,16 @@ file(GLOB_RECURSE SEMVECNET_PLUGIN_SOURCES CONFIGURE_DEPENDS
 )
 
 # ----------------------------- libsemvecnet_core.so ------------------------
+set(SEMVECNET_HAS_ONNXRUNTIME OFF)
 if(SEMVECNET_CORE_SOURCES)
   find_package(OpenCV REQUIRED COMPONENTS core imgproc)
+  find_package(ONNXRuntime REQUIRED MODULE)
+  set(SEMVECNET_HAS_ONNXRUNTIME ON)
   add_library(semvecnet_core SHARED ${SEMVECNET_CORE_SOURCES})
-  target_link_libraries(semvecnet_core PRIVATE opencv_core opencv_imgproc)
+  target_link_libraries(semvecnet_core
+    PUBLIC ONNXRuntime::ONNXRuntime
+    PRIVATE opencv_core opencv_imgproc
+  )
   set(_scope PUBLIC)
 else()
   message(WARNING "No sources under src/semvecnet or src/common yet; "
@@ -125,7 +135,9 @@ install(EXPORT semvecnetTargets
   NAMESPACE semvecnet::
   DESTINATION lib/cmake/semvecnet
 )
-install(FILES cmake/FindTensorRT.cmake DESTINATION lib/cmake/semvecnet)
+install(FILES cmake/FindTensorRT.cmake cmake/FindONNXRuntime.cmake
+  DESTINATION lib/cmake/semvecnet
+)
 
 configure_package_config_file(
   cmake/semvecnetConfig.cmake.in

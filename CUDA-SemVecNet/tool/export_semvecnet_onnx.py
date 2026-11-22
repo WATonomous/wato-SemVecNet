@@ -31,6 +31,16 @@ class Decoder(nn.Module):
         return out["all_cls_scores"][-1], out["all_pts_preds"][-1]
 
 
+class EncoderDecoder(nn.Module):
+    def __init__(self, encoder, decoder):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+
+    def forward(self, sem_map):
+        return self.decoder(self.encoder(sem_map))
+
+
 def sample_single_level(height, width, values, _shapes, locations, weights):
     """Export bilinear sampling with zero padding and align_corners=False."""
     batch, _, heads, channels = values.shape
@@ -62,6 +72,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=Path.cwd(), help="Python SemVecNet directory")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--combined", action="store_true", help="Export one semvecnet.onnx instead of two graphs")
     parser.add_argument("--reference", type=Path, help="Save PyTorch inputs and outputs for parity checks")
     args = parser.parse_args()
 
@@ -88,10 +99,11 @@ def main():
     with torch.no_grad():
         features = encoder(sem_map)
         logits, points = decoder(features)
-        torch.onnx.export(
-            encoder, sem_map, str(args.output / "semvecnet_encoder.onnx"),
-            input_names=["sem_map"], output_names=["features"], opset_version=13,
-        )
+        if not args.combined:
+            torch.onnx.export(
+                encoder, sem_map, str(args.output / "semvecnet_encoder.onnx"),
+                input_names=["sem_map"], output_names=["features"], opset_version=13,
+            )
         # Legacy PyTorch cannot export grid_sample. Keep the trained attention
         # projections and express only the one-level sampler with standard ops.
         def sample(values, shapes, locations, weights):
@@ -100,9 +112,15 @@ def main():
         with patch.object(attention_module, "multi_scale_deformable_attn_pytorch", sample):
             for actual, expected in zip(decoder(features), (logits, points)):
                 torch.testing.assert_close(actual, expected, atol=2e-4, rtol=2e-4)
+            if args.combined:
+                graph, inputs, filename, input_name = (
+                    EncoderDecoder(encoder, decoder).eval(), sem_map, "semvecnet.onnx", "sem_map"
+                )
+            else:
+                graph, inputs, filename, input_name = decoder, features, "semvecnet_decoder.onnx", "features"
             torch.onnx.export(
-                decoder, features, str(args.output / "semvecnet_decoder.onnx"),
-                input_names=["features"], output_names=["class_logits", "normalized_points"],
+                graph, inputs, str(args.output / filename),
+                input_names=[input_name], output_names=["class_logits", "normalized_points"],
                 opset_version=13,
             )
     if args.reference:

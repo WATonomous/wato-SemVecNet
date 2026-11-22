@@ -42,12 +42,12 @@ Nothing is compiled until you add sources; until then `semvecnet_core` is an emp
 Edit on the host; build and run in a throwaway GPU container (no dev container needed).
 Needs Docker + NVIDIA Container Toolkit.
 
-1. One-time: `tool/docker_run.sh true` builds the `semvecnet:dev` image (CUDA 13.4 + TensorRT 11.4, same as the monorepo bevfusion build).
-2. Run `tool/sync_headers.sh` to copy CUDA, TensorRT, and OpenCV headers into `.sysroot/`
-   (git-ignored), which host IntelliSense reads (`.vscode/c_cpp_properties.json` for the
-   Microsoft C/C++ extension, generated `.clangd` for clangd). Reload the VS Code window after.
-   If an older image lacks OpenCV, rebuild it or set `SEMVECNET_OPENCV_IMAGE` to a local build
-   image that already has the OpenCV development headers.
+1. Open the repository folder in VS Code on the host and allow automatic tasks when prompted.
+   The header-sync task builds `semvecnet:dev-ort` if needed (CUDA 13.4, TensorRT 11.4,
+   OpenCV and the ONNX Runtime GPU C++ SDK).
+2. The task copies the development headers into `.sysroot/` (git-ignored) so host
+   IntelliSense and clangd can find them. No Dev Container is needed. If automatic
+   tasks are disabled, run `semvecnet: sync IntelliSense headers` once instead.
 3. Build: `tool/build.sh` (or Ctrl+Shift+B). On the host it re-runs itself inside the container.
 4. Run: `tool/docker_run.sh build/semvecnet model/semvecnet.plan`, or `tool/docker_run.sh` for a shell.
 5. In VS Code, build and run are separate: **Ctrl+Shift+B** builds. Run with the task
@@ -81,5 +81,5 @@ See `../integration/README.md` for linking into `wato_monorepo`.
 ## Docker image
 
 ```
-docker build -f docker/Dockerfile --target build -t semvecnet:build .   # from CUDA-SemVecNet/
+docker build -f docker/Dockerfile --target dev -t semvecnet:dev-ort .   # from CUDA-SemVecNet/
 ```

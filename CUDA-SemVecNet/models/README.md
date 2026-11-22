@@ -1,6 +1,7 @@
 # Models Directory
 
-The three ONNX models in this directory run directly in ONNX Runtime. See
+Use `semvecnet.onnx` for a single encoder–decoder session in ONNX Runtime.
+The separate encoder and decoder exports are also supported. See
 [ONNX inference and pipeline notes](../docs/onnx_inference.md) for model inputs,
 outputs, export steps, and where CUDA kernels might help.
 

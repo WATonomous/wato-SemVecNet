@@ -13,7 +13,7 @@ Press **Ctrl+Shift+B** in VSCode to build (uses Docker automatically).
 Ctrl+Shift+B  →  builds in Docker with Ninja
 ```
 
-**First time:** Builds the `semvecnet:dev` Docker image (~5-10 minutes)  
+**First time:** Builds the `semvecnet:dev-ort` Docker image (~5-10 minutes)
 **After that:** Fast incremental builds
 
 ### 2. Command Line (Docker)
@@ -24,12 +24,11 @@ tool/build.sh Release      # Release (optimized, no debug)
 tool/build.sh Debug        # Debug (no optimization)
 ```
 
-### 3. Command Line (Host - if TensorRT is installed)
+### 3. Command Line (Host - if CUDA, TensorRT, OpenCV and ONNX Runtime are installed)
 ```bash
 cd CUDA-SemVecNet
-mkdir -p build && cd build
-CUDACXX=/opt/cuda/bin/nvcc cmake ..
-make -j$(nproc)
+CUDACXX=/opt/cuda/bin/nvcc cmake -S . -B build/host -G Ninja -DONNXRUNTIME_ROOT=/path/to/onnxruntime
+cmake --build build/host
 ```
 
 ---
@@ -85,7 +84,7 @@ CUDA-SemVecNet/
 │   └── test_plan_loader.cpp # Test program for loading .plan files
 ├── include/                 # Public headers
 ├── docker/
-│   └── Dockerfile           # Dev environment (CUDA 11.8 + TensorRT 8.5.3)
+│   └── Dockerfile           # Dev environment (CUDA 13.4 + TensorRT 11.4)
 ├── tool/
 │   ├── build.sh             # Build script (runs in Docker)
 │   └── docker_run.sh        # Docker wrapper
@@ -117,16 +116,15 @@ After building, you'll have:
 
 ## Docker Image Details
 
-**Base:** `nvcr.io/nvidia/cuda:11.8.0-devel-ubuntu20.04`
+**Base:** `nvcr.io/nvidia/cuda:13.4.3-cudnn-devel-ubuntu24.04`
 
 **Includes:**
-- CUDA 11.8
-- TensorRT 8.5.3
-- cuDNN 8.6
+- CUDA 13.4, TensorRT 11.4, cuDNN 9
+- OpenCV and the ONNX Runtime GPU C++ SDK
 - CMake, Ninja, GCC
 - Matches wato-cuda-bevfusion environment
 
 **Rebuild after Dockerfile changes:**
 ```bash
-docker build -f docker/Dockerfile --target dev -t semvecnet:dev .
+docker build -f docker/Dockerfile --target dev -t semvecnet:dev-ort .
 ```

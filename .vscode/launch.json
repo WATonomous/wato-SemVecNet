@@ -2,7 +2,7 @@
   // This is ONLY for debugging with breakpoints (F5). To just run the program, use the task
   // "semvecnet: run (docker)" (Terminal > Run Task, or the keyboard shortcut in the README).
   // F5 does not rebuild: press Ctrl+Shift+B first after changing code.
-  // gdb runs inside the semvecnet:dev image via tool/docker_run.sh; the repo is mounted at the
+  // gdb runs inside the dev image via tool/docker_run.sh; the repo is mounted at the
   // same path as on the host, so source paths line up with no mapping.
   "version": "0.2.0",
   "configurations": [

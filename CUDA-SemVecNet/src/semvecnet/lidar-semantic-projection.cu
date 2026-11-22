@@ -135,6 +135,7 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
     labeledPoints[validCount] = {point_index, camera_index, results[i].class_id};
     ++validCount;
   }
+  labeledPoints.resize(validCount);
 
   cudaFree(results_d);
   cudaFree(calibrations_d);

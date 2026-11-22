@@ -1,8 +1,15 @@
 @PACKAGE_INIT@
 
+if(POLICY CMP0144)
+  cmake_policy(SET CMP0144 NEW)  # Honor ONNXRUNTIME_ROOT in find_dependency.
+endif()
+
 include(CMakeFindDependencyMacro)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
 find_dependency(CUDAToolkit)
 find_dependency(TensorRT)
+if(@SEMVECNET_HAS_ONNXRUNTIME@)
+  find_dependency(ONNXRuntime MODULE)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/semvecnetTargets.cmake")

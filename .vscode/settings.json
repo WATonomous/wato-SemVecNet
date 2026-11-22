@@ -1,6 +1,6 @@
 {
   "cmake.sourceDirectory": "${workspaceFolder}/CUDA-SemVecNet",
-  "cmake.buildDirectory": "${workspaceFolder}/CUDA-SemVecNet/build",
+  "cmake.buildDirectory": "${workspaceFolder}/CUDA-SemVecNet/build/host",
   "cmake.generator": "Ninja",
   "cmake.configureOnOpen": false,
   "cmake.configureEnvironment": {
@@ -11,7 +11,7 @@
     "CUDACXX": "/opt/cuda/bin/nvcc",
     "CUDA_HOME": "/opt/cuda"
   },
-  "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+  "C_Cpp.default.configurationProvider": "",
   "C_Cpp.default.cppStandard": "c++17",
   "[cpp][cuda-cpp]": {
     "editor.tabSize": 2,

@@ -6,8 +6,15 @@ engine or custom model plugin is required. The exports use batch size 1.
 | File | Input | Output |
 | --- | --- | --- |
 | `hrnet_ocrnet_mapillary.onnx` | `input.1`: FP32 RGB `[1,3,720,960]` | `5776`: INT64 class IDs `[1,720,960]`, no extra argmax |
+| `semvecnet.onnx` | `sem_map`: FP32 RGB `[1,3,300,150]` | `class_logits`: FP32 `[1,70,4]`; `normalized_points`: FP32 `[1,70,20,2]` |
 | `semvecnet_encoder.onnx` | `sem_map`: FP32 RGB `[1,3,300,150]` | `features`: FP32 `[1,256,10,5]` |
 | `semvecnet_decoder.onnx` | `features`: encoder output | `class_logits`: FP32 `[1,70,4]`; `normalized_points`: FP32 `[1,70,20,2]` |
+
+Use `semvecnet.onnx` for one inference session, or the two split files if you
+need access to intermediate features. The main Python inference path calls
+`model.simple_test(...)` once; it runs the encoder and decoder internally,
+then calls `get_bboxes`. Both ONNX layouts stop before `get_bboxes`, so polyline
+postprocessing is still the caller's responsibility. HRNet is separate.
 
 For OCRNet, resize RGB to width 960, height 720. Divide by 255, then subtract
 `[0.485, 0.456, 0.406]` and divide by `[0.229, 0.224, 0.225]`. Match camera
@@ -32,8 +39,8 @@ Run HRNet once for each `prepared.hrnet_images[i]`, binding it as FP32
 projection after inference; LiDAR is not an HRNet input. This call only prepares
 the buffers on the CPU, using OpenCV `INTER_AREA` on RGB8 before FP32
 normalization and HWC-to-CHW conversion, like the Python reference. The build
-requires OpenCV `core` and `imgproc` (`libopencv-dev` on Ubuntu). If you already
-have a `semvecnet:dev` image, rebuild it to pick up OpenCV. The ROS wrapper still
+requires OpenCV `core` and `imgproc` (`libopencv-dev` on Ubuntu), included in
+the `semvecnet:dev-ort` image. The ROS wrapper still
 owns camera ordering, synchronization, and calibration; it does not pass a CUDA
 stream.
 
@@ -62,11 +69,9 @@ def load(name):
     return ort.InferenceSession(str(models / name), providers=providers)
 
 ocr = load("hrnet_ocrnet_mapillary.onnx")
-enc = load("semvecnet_encoder.onnx")
-dec = load("semvecnet_decoder.onnx")
+semvecnet = load("semvecnet.onnx")
 mask, = ocr.run(None, {"input.1": np.zeros((1, 3, 720, 960), np.float32)})
-features, = enc.run(None, {"sem_map": np.zeros((1, 3, 300, 150), np.float32)})
-logits, points = dec.run(None, {"features": features})
+logits, points = semvecnet.run(None, {"sem_map": np.zeros((1, 3, 300, 150), np.float32)})
 print(mask.shape, logits.shape, points.shape)
 ```
 
@@ -108,7 +113,7 @@ The OCRNet file is the existing export of the trained Mapillary snapshot.
 See the [upstream export recipe](../../docs/prepare_dataset.md#prepare-dataset).
 Do not export the ImageNet initialization checkpoint as a standalone model.
 
-To rebuild the two SemVecNet graphs, run from the repository root:
+To rebuild the combined SemVecNet graph, run from the repository root:
 
 ```bash
 docker build -t semvecnet-bevfusion:latest -f docker/Dockerfile .
@@ -117,8 +122,10 @@ docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS=4 \
   -v "$PWD/SemVecNet/ckpts:/workspace/SemVecNet/ckpts:ro" \
   -v "$PWD/CUDA-SemVecNet/tool:/export:ro" \
   -v "$PWD/CUDA-SemVecNet/models:/artifacts" \
-  semvecnet-bevfusion:latest /export/export_semvecnet_onnx.py --output /artifacts
+  semvecnet-bevfusion:latest /export/export_semvecnet_onnx.py --combined --output /artifacts
 ```
+
+Omit `--combined` to export the encoder and decoder as two separate graphs.
 
 The exporter loads `mAP_epoch_99.pth` strictly with the nuScenes model
 configuration. It replaces only the decoder's bilinear sampler during export

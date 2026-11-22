@@ -1,4 +1,5 @@
-#include "semvecnet/semvecnet.hpp"
+#include "semvecnet/camera-preprocessing.hpp"
+#include "semvecnet/lidar-preprocessing.hpp"
 
 #include <array>
 #include <cmath>
@@ -29,15 +30,17 @@ int main() {
   const nvtype::half lidar[] = {{0x3c00}, {0xc000}, {0x3800}, {0x4800},
                                 {0},      {0x4400}, {0x4000}, {0x4200},
                                 {0},      {0x3400}};
-  semvecnet::PreparedFrame frame;
-  semvecnet::forward(images.data(), lidar, 2, cameras, width, height, frame);
+  const semvecnet::camera::Preprocessor camera_preprocessor;
+  const semvecnet::lidar::Preprocessor lidar_preprocessor;
+  const auto hrnet_images = camera_preprocessor.forward(images.data(), cameras, width, height);
+  const auto lidar_points = lidar_preprocessor.forward(lidar, 2);
   const auto near = [](float a, float b) { return std::abs(a - b) < 1e-6f; };
-  if (frame.hrnet_images.size() != cameras) {
+  if (hrnet_images.size() != cameras) {
     std::cerr << "Incorrect camera count\n";
     return 1;
   }
   for (int i = 0; i < cameras; ++i) {
-    const auto &tensor = frame.hrnet_images[i];
+    const auto &tensor = hrnet_images[i];
     if (tensor.size() != 3 * plane ||
         !near(tensor[0], ((i == 0 ? 84 : i * 20) / 255.0f - 0.485f) / 0.229f) ||
         !near(tensor[plane - 1], (i * 20 / 255.0f - 0.485f) / 0.229f) ||
@@ -49,13 +52,13 @@ int main() {
   }
   const std::vector<std::array<float, 5>> expected = {{1, -2, 0.5f, 8, 0},
                                                       {4, 2, 3, 0, 0.25f}};
-  if (frame.lidar_points != expected) {
+  if (lidar_points != expected) {
     std::cerr << "Incorrect FP16 LiDAR decoding or point stride\n";
     return 1;
   }
   images.back() = nullptr;
   try {
-    semvecnet::forward(images.data(), lidar, 2, cameras, width, height, frame);
+    camera_preprocessor.forward(images.data(), cameras, width, height);
   } catch (const std::invalid_argument &) {
     return 0;
   }

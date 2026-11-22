@@ -2,7 +2,7 @@
 # Requires the NVIDIA Container Toolkit.
 services:
   dev:
-    image: semvecnet:dev
+    image: semvecnet:dev-ort
     build:
       context: ..
       dockerfile: docker/Dockerfile

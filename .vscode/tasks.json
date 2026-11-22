@@ -30,6 +30,8 @@
       "type": "shell",
       "command": "tool/sync_headers.sh",
       "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
+      "runOptions": { "runOn": "folderOpen" },
+      "presentation": { "reveal": "silent", "panel": "dedicated", "focus": false },
       "problemMatcher": []
     },
     {

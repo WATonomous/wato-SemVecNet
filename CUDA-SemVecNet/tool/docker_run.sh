@@ -1,5 +1,5 @@
 #!/bin/bash
-# Run a command in a throwaway GPU container from the semvecnet:dev image (no dev container needed).
+# Run a command in a throwaway GPU container (no dev container needed).
 # The repo is mounted at the SAME absolute path as on the host, so paths in build output,
 # compiler errors and compile_commands.json match what VS Code sees.
 #
@@ -8,15 +8,20 @@
 #   tool/docker_run.sh build/semvecnet model/semvecnet.plan
 #
 # Builds the image first if it does not exist. Rebuild manually after Dockerfile changes:
-#   docker build -f docker/Dockerfile --target dev -t semvecnet:dev .
+#   docker build -f docker/Dockerfile --target dev -t semvecnet:dev-ort .
 set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_DIR="$(dirname "$PROJECT_DIR")"
-IMAGE="${SEMVECNET_IMAGE:-semvecnet:dev}"
+IMAGE="${SEMVECNET_IMAGE:-semvecnet:dev-ort}"
 
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Image $IMAGE not found, building it (one-time, a few minutes)..." >&2
   docker build -f "$PROJECT_DIR/docker/Dockerfile" --target dev -t "$IMAGE" "$PROJECT_DIR"
+fi
+
+# Header sync only needs the image, not a running GPU container.
+if [ "${1:-}" = "--prepare-image" ]; then
+  exit 0
 fi
 
 # -i always (stdin is forwarded, e.g. for the VS Code debugger); -t only on a real terminal.
