@@ -118,6 +118,9 @@ if(BUILD_TESTING AND SEMVECNET_CORE_SOURCES)
   add_executable(test_hrnet_preprocessing tests/hrnet_preprocessing.cpp)
   target_link_libraries(test_hrnet_preprocessing PRIVATE semvecnet_core)
   add_test(NAME hrnet_preprocessing COMMAND test_hrnet_preprocessing)
+  add_executable(test_polyline_postprocessing tests/polyline_postprocessing.cpp)
+  target_link_libraries(test_polyline_postprocessing PRIVATE semvecnet_core)
+  add_test(NAME polyline_postprocessing COMMAND test_polyline_postprocessing)
 endif()
 
 # ----------------------------- install / export ----------------------------

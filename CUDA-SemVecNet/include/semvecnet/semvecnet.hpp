@@ -10,6 +10,7 @@
 #include "common/common.hpp"
 #include "semvecnet/base-config.hpp"
 #include "semvecnet/lidar-semantic-projection.hpp"
+#include "semvecnet/polyline-postprocessing.hpp"
 #include "semvecnet/semantic-bev-mapping.hpp"
 #include "semvecnet/semvecnet-inference.hpp"
 
@@ -26,6 +27,7 @@ struct PreparedFrame {
 struct ForwardResult {
   std::vector<semantic_projection::LabeledPoint> labeled_points;
   model::DecoderOutput predictions;
+  std::vector<postprocessing::Polyline> polylines;
 };
 
 // One instance owns the inference sessions and persistent mapper across frames.
@@ -48,6 +50,7 @@ private:
   TensorRtEngine hrnet_engine_;
   bev_mapping::Mapper mapper_;
   model::Model model_;
+  postprocessing::Postprocessor postprocessor_;
 };
 
 } // namespace semvecnet
