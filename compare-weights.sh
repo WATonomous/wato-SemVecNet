@@ -4,7 +4,8 @@
 #   ./compare-weights.sh [BAG] [stage-1 options of run_mcap_pipeline.sh, e.g. --cameras a,b]
 #
 #   BAG  path inside the shared Drive "Bags" folder (downloaded with rclone), or a .mcap file on the server.
-#        Default: recording_20260224_213947/recording_20260224_213947_1.mcap, a held-out test drive (never trained on).
+#        Default: recording_20261004_184219/recording_20261004_184219_0.mcap, an 8-camera daytime drive not used in training.
+#        The earlier snowy default (recording_20260224_213947_1) is still usable as an argument.
 #
 # Runs the same pipeline as run_mcap_pipeline.sh, once for stage 1 and twice for stages 2+3+viz:
 #   1. stage 1 (HRNet + LiDAR semantic maps) on a slice of the bag, with the fine-tuning data settings
@@ -33,7 +34,7 @@
 #SBATCH --time=4:00:00
 set -euo pipefail
 
-DEFAULT_BAG=recording_20260224_213947/recording_20260224_213947_1.mcap
+DEFAULT_BAG=recording_20261004_184219/recording_20261004_184219_0.mcap
 PANO8=camera_pano_nn,camera_pano_ne,camera_pano_ee,camera_pano_se,camera_pano_ss,camera_pano_sw,camera_pano_ww,camera_pano_nw
 BAGS_FOLDER_ID=127Kw3o7Org474rkK1wwMDRZKiYHaR0Db      # Drive folder "Bags"
 WEIGHTS_FOLDER_ID=1bV7mnjSOYg2M-LBbM59C_eFDIvqvZZ7i   # Drive weights folder
