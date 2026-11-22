@@ -36,7 +36,7 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   std::vector<std::vector<int64_t>> masks = hrnet::forward(*hrnet_engine_.context(), prepared.hrnet_images);
 
   // Associate LiDAR points with camera mask labels and update the BEV map
-  auto labeled_points = semantic_projection::forward(prepared.lidar_points, masks, calibrations);
+  auto labeled_points = semantic_projection::forward(prepared.lidar_points, masks, calibrations, image_width, image_height);
   mapper_.forward(prepared.lidar_points, labeled_points, lidar_to_map);
 
   // Render the ego-centric model input from the map.

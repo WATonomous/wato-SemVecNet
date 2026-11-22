@@ -8,7 +8,7 @@
 namespace semvecnet::semantic_projection {
 
 struct CameraCalibration {
-  // Row-major 3x3 camera intrinsics, scaled to the 960x720 mask.
+  // Row-major 3x3 camera intrinsics for the input image dimensions.
   std::array<float, 9> intrinsics;
   // Row-major 4x4 homogeneous transform from LiDAR to camera coordinates.
   std::array<float, 16> lidar_to_camera;
@@ -26,6 +26,6 @@ struct LabeledPoint {
 std::vector<LabeledPoint>
 forward(const std::vector<std::array<float, 5>> &lidar_points,
         const std::vector<std::vector<std::int64_t>> &masks,
-        const std::vector<CameraCalibration> &calibrations);
+        const std::vector<CameraCalibration> &calibrations, int image_width, int image_height);
 
 } // namespace semvecnet::semantic_projection

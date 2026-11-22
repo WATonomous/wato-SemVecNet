@@ -212,8 +212,6 @@ def extract(bag, output, start, frame_count):
             k = np.array(info.p).reshape(3, 4)[:, :3].copy()
             if not np.isfinite(k).all() or k[0, 0] <= 0 or k[1, 1] <= 0:
                 raise ValueError(f"Missing rectified intrinsics for {frame}")
-            k[0] *= 960 / width
-            k[1] *= 720 / height
             world_from_camera = pose @ lookup(base_frame, frame.lstrip("/"))
             lidar_to_camera = np.linalg.solve(world_from_camera, world_from_lidar)
             payload = bytes(image.data)

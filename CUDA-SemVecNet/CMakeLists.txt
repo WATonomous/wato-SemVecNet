@@ -128,6 +128,9 @@ if(BUILD_TESTING AND SEMVECNET_CORE_SOURCES)
   add_executable(test_semantic_map_renderer tests/semantic_map_renderer.cpp)
   target_link_libraries(test_semantic_map_renderer PRIVATE semvecnet_core)
   add_test(NAME semantic_map_renderer COMMAND test_semantic_map_renderer)
+  add_executable(test_lidar_semantic_projection tests/lidar_semantic_projection.cpp)
+  target_link_libraries(test_lidar_semantic_projection PRIVATE semvecnet_core)
+  add_test(NAME lidar_semantic_projection COMMAND test_lidar_semantic_projection)
 endif()
 
 # ----------------------------- install / export ----------------------------

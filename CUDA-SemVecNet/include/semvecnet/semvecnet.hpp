@@ -35,7 +35,7 @@ public:
 
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
   // five FP16 values per LiDAR point. Calibrations follow camera order and
-  // use mask-sized intrinsics; poses are row-major 4x4 transforms into map coordinates.
+  // use input-image intrinsics; poses are row-major 4x4 transforms into map coordinates.
   // semantic_rgb, if requested, receives the rendered model input before normalization.
   Polylines
   forward(const unsigned char *const *camera_images,
