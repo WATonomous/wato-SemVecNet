@@ -81,7 +81,8 @@ class RingRoadMetrics(Hook):
             self.checkpoint(runner, 'latest.pth', epoch)
         elapsed = time.monotonic() - started
         self.rows.append(row)
-        row.update(best_test_mAP=self.best, best_epoch=self.best_epoch, seconds=round(elapsed, 1))
+        row.update(best_test_mAP=self.best, best_epoch=self.best_epoch, seconds=round(elapsed, 1),
+                   peak_gpu_gb=round(torch.cuda.max_memory_allocated() / 2**30, 2))
         epoch_times = [r['seconds'] for r in self.rows if r['epoch']]
         row['eta_seconds'] = round(np.mean(epoch_times) * (runner.max_epochs - epoch)) if epoch_times else None
         for ext in ('json', 'csv'):
