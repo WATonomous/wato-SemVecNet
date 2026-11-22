@@ -39,7 +39,7 @@ std::vector<std::vector<std::int64_t>> forward(nvinfer1::IExecutionContext &cont
   }
 
   constexpr std::size_t pixels = kHrnetHeight * kHrnetWidth;
-  const std::size_t inputBytes = 3 * pixels * sizeof(float);
+  const std::size_t inputBytes = kHrnetChannels * pixels * sizeof(float);
   const std::size_t outputBytes = pixels * sizeof(std::int64_t);
   CudaStream stream;
   void *input_d = nullptr;

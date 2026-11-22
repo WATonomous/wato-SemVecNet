@@ -10,7 +10,6 @@
 namespace semvecnet::camera {
 namespace {
 
-constexpr int kChannels = 3;
 constexpr std::size_t kPlaneSize = kHrnetWidth * kHrnetHeight;
 
 std::vector<float> prepareImage(const unsigned char *rgb, int width,
@@ -25,14 +24,14 @@ std::vector<float> prepareImage(const unsigned char *rgb, int width,
   cv::Mat normalized;
   resized.convertTo(normalized, CV_32F);
   cv::divide(normalized, cv::Scalar::all(255.0), normalized);
-  cv::subtract(normalized, cv::Scalar(0.485f, 0.456f, 0.406f), normalized);
-  cv::divide(normalized, cv::Scalar(0.229f, 0.224f, 0.225f), normalized);
+  cv::subtract(normalized, cv::Scalar(kHrnetMean[0], kHrnetMean[1], kHrnetMean[2]), normalized);
+  cv::divide(normalized, cv::Scalar(kHrnetStd[0], kHrnetStd[1], kHrnetStd[2]), normalized);
 
   // Like NumPy's moveaxis followed by ascontiguousarray: write R, G and B
   // directly into three consecutive planes of the [1, 3, 720, 960] tensor.
-  std::vector<float> tensor(kChannels * kPlaneSize);
-  cv::Mat planes[kChannels];
-  for (int c = 0; c < kChannels; ++c)
+  std::vector<float> tensor(kHrnetChannels * kPlaneSize);
+  cv::Mat planes[kHrnetChannels];
+  for (int c = 0; c < kHrnetChannels; ++c)
     planes[c] = cv::Mat(kHrnetHeight, kHrnetWidth, CV_32FC1,
                         tensor.data() + c * kPlaneSize);
   cv::split(normalized, planes);

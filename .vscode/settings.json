@@ -26,5 +26,6 @@
   },
   "files.watcherExclude": {
     "**/CUDA-SemVecNet/build/**": true
-  }
+  },
+  "editor.fontLigatures": true
 }

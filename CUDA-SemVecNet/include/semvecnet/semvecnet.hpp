@@ -7,12 +7,10 @@
 #include <NvInfer.h>
 
 #include "common/common.hpp"
+#include "semvecnet/base-config.hpp"
 #include "semvecnet/lidar-semantic-projection.hpp"
 
 namespace semvecnet {
-
-inline constexpr int kHrnetWidth = 960;
-inline constexpr int kHrnetHeight = 720;
 
 struct PreparedFrame {
   // One contiguous FP32 [1, 3, 720, 960] RGB tensor per camera, in input order.
