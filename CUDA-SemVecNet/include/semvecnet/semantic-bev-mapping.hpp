@@ -12,6 +12,13 @@
 
 namespace semvecnet::bev_mapping {
 
+struct PendingUpdate {
+  std::size_t cell_start;
+  int class_index;
+  float distance_weight;
+  bool intensity_boost;
+};
+
 // Per-class evidence for each map cell. All-zero cells have no evidence.
 struct Grid {
   std::size_t cells_x = kBevGridCells;
@@ -31,7 +38,10 @@ class Mapper {
 public:
   const Grid &grid() const { return grid_; }
   // Replacing the active grid clears saved tiles; dimensions must match the configured tile layout.
-  void setGrid(Grid grid) { grid_ = std::move(grid); tiles_.clear(); }
+  void setGrid(Grid grid) {
+    grid_ = std::move(grid);
+    tiles_.clear();
+  }
 
   // Updates the map using LiDAR points and their camera-label associations.
   // lidar_to_map is a row-major 4x4 transform from LiDAR to map coordinates.

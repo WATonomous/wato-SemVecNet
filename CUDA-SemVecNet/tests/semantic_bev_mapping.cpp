@@ -25,11 +25,11 @@ int main() {
   };
   const auto index = index_for(-1.1f, 0.1f);
   const float weight = std::log(std::sqrt(1.1f * 1.1f + 2.1f * 2.1f));
-  if (!near(grid.evidence[index], 2 * (-5.48753365f + weight)) ||
-      !near(grid.evidence[index + 1], 2 * (-0.20017053f + weight)))
+  if (!near(grid.evidence[index], -5.48753365f + weight) ||
+      !near(grid.evidence[index + 1], -0.20017053f + weight))
     throw std::runtime_error("Unexpected remapping or class likelihood");
   mapper.forward(points, {{0, 0, 24}}, transform);
-  if (!near(grid.evidence[index + 2], 2 * (-3.86334867f + weight) + (-0.50561930f + weight)))
+  if (!near(grid.evidence[index + 2], (-3.86334867f + weight) + (-0.50561930f + weight)))
     throw std::runtime_error("Evidence did not persist across frames");
 
   const std::array<float, 4> saved = {grid.evidence[index], grid.evidence[index + 1],
@@ -61,4 +61,18 @@ int main() {
   intensity_mapper.forward(intensity_points, {{0, 0, 24}}, transform);
   if (!near(intensity_mapper.grid().evidence[index + 2], -0.50561930f + weight + 2.0f))
     throw std::runtime_error("Lane intensity weighting was not applied");
+
+  Mapper duplicates;
+  const std::vector<std::array<float, 5>> repeated = {
+      {1.11f, 2.11f, 0, 1, 0}, {1.12f, 2.12f, 0, 5, 0}};
+  duplicates.forward(repeated, {{0, 0, 24}, {1, 1, 24}, {0, 0, 13}}, transform);
+  const float last_weight = std::log(std::hypot(1.12f, 2.12f));
+  const float road_weight = std::log(std::hypot(1.11f, 2.11f));
+  if (!near(duplicates.grid().evidence[index + 2],
+            (-1.01453005f + road_weight) + (-0.50561930f + last_weight) + 2.0f))
+    throw std::runtime_error("Duplicate grouping, class order, or intensity boost is incorrect");
+  duplicates.forward(repeated, {{0, 0, 24}, {1, 1, 24}}, transform);
+  if (!near(duplicates.grid().evidence[index + 2],
+            (-1.01453005f + road_weight) + 2 * ((-0.50561930f + last_weight) + 2.0f)))
+    throw std::runtime_error("Observations across separate sweeps must accumulate");
 }

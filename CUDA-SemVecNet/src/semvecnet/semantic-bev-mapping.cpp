@@ -8,16 +8,19 @@ namespace semvecnet::bev_mapping {
 namespace {
 // Log likelihoods for the four classes, indexed by true class then observed class.
 // Derived from the bundled HRNet confusion matrix after class merging and reweighting.
-constexpr float kLogLikelihood[4][4] = {
-    {-0.02048131f, -5.48753365f, -4.91826495f, -4.73037683f},
-    {-1.83409733f, -0.20017053f, -3.99618096f, -5.72434692f},
-    {-1.01453005f, -3.86334867f, -0.50561930f, -4.32016333f},
-    {-2.81124422f, -7.19043372f, -6.59377868f, -0.06427482f}};
-}
+constexpr float kLogLikelihood[4][4] = {{-0.02048131f, -5.48753365f, -4.91826495f, -4.73037683f},
+                                        {-1.83409733f, -0.20017053f, -3.99618096f, -5.72434692f},
+                                        {-1.01453005f, -3.86334867f, -0.50561930f, -4.32016333f},
+                                        {-2.81124422f, -7.19043372f, -6.59377868f, -0.06427482f}};
+} // namespace
 
 void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
                      const std::vector<semantic_projection::LabeledPoint> &labeled_points, const std::array<float, 16> &lidar_to_map) {
   checkMapOrigin(lidar_to_map);
+
+  // Temporary observations for this sweep; not yet used to update the map.
+  std::vector<PendingUpdate> pending_updates;
+  pending_updates.reserve(labeled_points.size());
 
   for (const auto &association : labeled_points) {
     const int class_index = remapClass(association.class_id);
@@ -25,9 +28,11 @@ void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
       continue;
     const auto &point = lidar_points[association.point_index];
 
-    // Transform the point into map coordinates before finding its grid cell.
+    // Transform the point into map coordinates before finding its grid cell
     const float x = lidar_to_map[0] * point[0] + lidar_to_map[1] * point[1] + lidar_to_map[2] * point[2] + lidar_to_map[3];
     const float y = lidar_to_map[4] * point[0] + lidar_to_map[5] * point[1] + lidar_to_map[6] * point[2] + lidar_to_map[7];
+
+    // Convert the x and y coordinates into coordinates on the sesmantic grid
     const float cell_x = (x - grid_.origin_x) / grid_.resolution;
     const float cell_y = (y - grid_.origin_y) / grid_.resolution;
 
@@ -38,14 +43,41 @@ void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
     const auto y_index = static_cast<std::size_t>(cell_y);
     const auto index = (x_index * grid_.cells_y + y_index) * grid_.class_count + static_cast<std::size_t>(class_index);
 
-    // Update each class with the observation likelihood and range weighting.
+    // Collect the observation likelihood's range weight for this cell.
     const float distance = std::sqrt(point[0] * point[0] + point[1] * point[1] + point[2] * point[2]);
     const float distance_weight = std::log(std::max(distance, 1e-6f));
     const auto cell_start = index - static_cast<std::size_t>(class_index);
+
+    const bool intensity_boost = class_index == 2 && (point[3] < 2.0f || point[3] > 14.0f);
+    pending_updates.push_back({cell_start, class_index, distance_weight, intensity_boost});
+  }
+
+  // Stable ordering keeps the original observation order within each group.
+  std::stable_sort(pending_updates.begin(), pending_updates.end(), [](const PendingUpdate &a, const PendingUpdate &b) {
+    if (a.class_index != b.class_index)
+      return a.class_index < b.class_index;
+    return a.cell_start < b.cell_start;
+  });
+
+  std::vector<PendingUpdate> grouped_updates;
+  grouped_updates.reserve(pending_updates.size());
+  for (const auto &update : pending_updates) {
+    if (grouped_updates.empty() || grouped_updates.back().class_index != update.class_index ||
+        grouped_updates.back().cell_start != update.cell_start) {
+      grouped_updates.push_back(update);
+    } else {
+      // NumPy's indexed update uses the last duplicate's distance weight.
+      grouped_updates.back().distance_weight = update.distance_weight;
+      grouped_updates.back().intensity_boost |= update.intensity_boost;
+    }
+  }
+
+  for (const PendingUpdate &pendingUpdate : grouped_updates) {
     for (std::size_t c = 0; c < grid_.class_count; ++c)
-      grid_.evidence[cell_start + c] += kLogLikelihood[c][class_index] + distance_weight;
-    if (class_index == 2 && (point[3] < 2.0f || point[3] > 14.0f))
-      grid_.evidence[index] += 2.0f;
+      grid_.evidence[pendingUpdate.cell_start + c] += kLogLikelihood[c][pendingUpdate.class_index] + pendingUpdate.distance_weight;
+
+    if (pendingUpdate.intensity_boost)
+      grid_.evidence[pendingUpdate.cell_start + pendingUpdate.class_index] += 2.0f;
   }
 }
 
