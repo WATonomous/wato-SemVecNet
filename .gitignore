@@ -2,6 +2,7 @@
 !/run_mcap_pipeline.sh
 !/run_stage1_slurm.sh
 !/fine-tune.sh
+!/compare-weights.sh
 /logs/
 /rclone.conf
 change_submit.py
