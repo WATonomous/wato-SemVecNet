@@ -22,7 +22,8 @@ int main() {
 
   const semantic_map::Renderer renderer;
   std::array<float, 16> pose = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-  const auto image = renderer.forward(grid, pose);
+  std::vector<std::uint8_t> rgb;
+  const auto image = renderer.forward(grid, pose, &rgb);
   const auto near = [](float a, float b) { return std::abs(a - b) < 1e-5f; };
   const auto pixel = [](int channel, int row, int col) { return channel * 300 * 150 + row * 150 + col; };
   if (image.values.size() != 3 * 300 * 150 ||
@@ -30,6 +31,12 @@ int main() {
       !near(image.values[pixel(2, 139, 74)], (200.0f - 103.53f) / 57.375f) ||
       !near(image.values[pixel(0, 149, 74)], -123.675f / 58.395f))
     throw std::runtime_error("Incorrect map colors, normalization, or layout");
+  const auto crosswalk = 3 * (139 * 150 + 74);
+  const auto unknown = 3 * (149 * 150 + 74);
+  if (rgb.size() != image.values.size() ||
+      rgb[crosswalk] != 140 || rgb[crosswalk + 1] != 140 || rgb[crosswalk + 2] != 200 ||
+      rgb[unknown] != 0 || rgb[unknown + 1] != 0 || rgb[unknown + 2] != 0)
+    throw std::runtime_error("Incorrect packed RGB preview of model input");
 
   // A 90-degree yaw points ego forward toward increasing map y.
   pose[0] = 0; pose[1] = -1;

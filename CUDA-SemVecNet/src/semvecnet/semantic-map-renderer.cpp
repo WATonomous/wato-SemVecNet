@@ -7,16 +7,17 @@
 
 namespace semvecnet::semantic_map {
 namespace {
-constexpr int kHeight = 300;
-constexpr int kWidth = 150;
 constexpr std::array<std::array<float, 3>, 4> kColors = {{{{128, 64, 128}}, {{140, 140, 200}}, {{255, 255, 255}}, {{244, 35, 232}}}};
 constexpr std::array<float, 3> kMean = {123.675f, 116.28f, 103.53f};
 constexpr std::array<float, 3> kStd = {58.395f, 57.12f, 57.375f};
 } // namespace
 
-model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const std::array<float, 16> &ego_to_map) const {
+model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const std::array<float, 16> &ego_to_map,
+                                          std::vector<std::uint8_t> *rgb) const {
   model::SemanticMapInput output;
   output.values.resize(3 * kHeight * kWidth);
+  if (rgb)
+    rgb->resize(output.values.size());
 
   // Locate the ego position in grid cells; map x indexes rows and map y columns.
   const float center_x = std::nearbyint((ego_to_map[3] - grid.origin_x) / grid.resolution);
@@ -57,8 +58,11 @@ model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const s
       }
       // Normalize RGB and store each channel in its own contiguous image plane.
       const auto pixel = static_cast<std::size_t>(row * kWidth + col);
-      for (std::size_t channel = 0; channel < color.size(); ++channel)
+      for (std::size_t channel = 0; channel < color.size(); ++channel) {
         output.values[channel * kHeight * kWidth + pixel] = (color[channel] - kMean[channel]) / kStd[channel];
+        if (rgb)
+          (*rgb)[pixel * 3 + channel] = static_cast<std::uint8_t>(color[channel]);
+      }
     }
   }
   return output;

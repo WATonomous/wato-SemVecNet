@@ -100,8 +100,9 @@ endif()
 
 # ----------------------------- semvecnet (demo executable) -----------------
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+  find_package(OpenCV REQUIRED COMPONENTS imgcodecs imgproc)
   add_executable(semvecnet src/main.cpp)
-  target_link_libraries(semvecnet PRIVATE semvecnet_core)
+  target_link_libraries(semvecnet PRIVATE semvecnet_core opencv_imgcodecs opencv_imgproc)
   list(APPEND _install_targets semvecnet)
 endif()
 

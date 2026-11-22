@@ -49,7 +49,7 @@ Needs Docker + NVIDIA Container Toolkit.
    IntelliSense and clangd can find them. No Dev Container is needed. If automatic
    tasks are disabled, run `semvecnet: sync IntelliSense headers` once instead.
 3. Build: `tool/build.sh` (or Ctrl+Shift+B). On the host it re-runs itself inside the container.
-4. Run: `tool/docker_run.sh build/semvecnet model/semvecnet.plan`, or `tool/docker_run.sh` for a shell.
+4. Run the [rosbag smoke test](#rosbag-smoke-test), or use `tool/docker_run.sh` for a shell.
 5. In VS Code, build and run are separate: **Ctrl+Shift+B** builds. Run with the task
    "semvecnet: run (docker)" (Terminal > Run Task, or Run Test Task); it prints in the Terminal panel
    and ends when the program ends. **F5** is bound to this task for C++/CUDA files in the user
@@ -66,6 +66,45 @@ The repo is mounted at the same absolute path inside the container, so compiler 
 
 GPU architecture defaults to `sm_86` (RTX 30xx) in the image; use
 `--build-arg CUDASM=89` or `CUDASM=89 tool/build.sh` for other GPUs.
+
+## Rosbag smoke test
+
+From the repository root:
+
+```bash
+CUDA-SemVecNet/tool/run_rosbag_smoke.py
+```
+
+This reads two synchronized frames from
+`~/Desktop/data/bags/may_30_ring_road_test_5/` and runs the C++ pipeline with
+all eight cameras and the merged LiDAR. To process every synchronized LiDAR
+sweep from the start of the recording:
+
+```bash
+CUDA-SemVecNet/tool/run_rosbag_smoke.py --frames 0 --out /path/to/new/results
+```
+
+Each frame has the same six-digit filename stem in three directories:
+
+- `polylines/`: JSON with timestamp, local odometry pose, and scored vectors
+  in rear-axle coordinates (meters, x forward and y left), like the Python
+  `vectors/` files.
+- `semantic_maps/`: the 150 × 300 RGB semantic map before normalization.
+- `combined/`: the semantic map next to the predicted polylines on the same
+  extent, using the Python comparison view's class colors.
+
+The C++ mapper accumulates sweeps throughout the run. It paints LiDAR returns;
+the Python pipeline can additionally project camera pixels onto the road
+plane, so the C++ maps can be sparser. Predictions use the C++ score filter,
+so a vector list can be empty. The full run reports sweeps skipped for
+missing camera synchronization or odometry rather than filling in data.
+
+The script uses Docker with NVIDIA GPU support, the existing
+`semvecnet-mcap-hrnet:latest` reader image, `model/hrnet_ocrnet_mapillary.plan`,
+and `models/semvecnet.onnx` (model paths relative to `CUDA-SemVecNet/`). Use
+`--start`, `--frames`, or `--out` to change the sample or output directory;
+see `--help` for model overrides. It is configured for the sensor topics and
+calibration of this recording, not a generic ROS bag player.
 
 ## Engine
 

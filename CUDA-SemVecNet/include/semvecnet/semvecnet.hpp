@@ -36,13 +36,15 @@ public:
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
   // five FP16 values per LiDAR point. Calibrations follow camera order and
   // use mask-sized intrinsics; poses are row-major 4x4 transforms into map coordinates.
+  // semantic_rgb, if requested, receives the rendered model input before normalization.
   Polylines
   forward(const unsigned char *const *camera_images,
           const nvtype::half *lidar_points, int num_points, int num_cameras,
           int image_width, int image_height,
           const std::vector<semantic_projection::CameraCalibration> &calibrations,
           const std::array<float, 16> &lidar_to_map,
-          const std::array<float, 16> &ego_to_map);
+           const std::array<float, 16> &ego_to_map,
+           std::vector<std::uint8_t> *semantic_rgb = nullptr);
 
 private:
   TensorRtEngine hrnet_engine_;
