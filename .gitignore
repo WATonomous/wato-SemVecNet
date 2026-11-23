@@ -1,5 +1,7 @@
 /*.sh
 !/run_bevfusion_inference.sh
+!/run_nsys_profile.sh
+/nsys_reports/
 /outputs/
 change_submit.py
 cluster_submit.yaml

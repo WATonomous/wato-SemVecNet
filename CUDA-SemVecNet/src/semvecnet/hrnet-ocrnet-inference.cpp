@@ -51,6 +51,7 @@ std::vector<std::vector<std::int64_t>> forward(nvinfer1::IExecutionContext &cont
   std::vector<std::vector<std::int64_t>> masks;
   masks.reserve(images.size());
 
+  // TODO: Run all the images through HRNet in parallel
   for (const auto &image : images) {
     // Copy the image data to the GPU
     cudaMemcpy(input_d, image.data(), inputBytes, cudaMemcpyHostToDevice);

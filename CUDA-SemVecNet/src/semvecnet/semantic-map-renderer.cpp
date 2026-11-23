@@ -28,6 +28,7 @@ model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const s
   const float cosine = std::cos(yaw);
   const float sine = std::sin(yaw);
 
+  // TODO: apply all of these operations to every pixel in parallel? (only have like 150x300 pixels)
   for (int row = 0; row < kHeight; ++row) {
     for (int col = 0; col < kWidth; ++col) {
       // Each output pixel covers 0.2 m; flip both axes so ego-forward is up.

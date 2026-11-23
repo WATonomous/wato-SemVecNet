@@ -6,8 +6,7 @@
 
 namespace semvecnet::lidar {
 
-std::vector<std::array<float, 5>>
-Preprocessor::forward(const nvtype::half *points, int count) const {
+std::vector<std::array<float, 5>> Preprocessor::forward(const nvtype::half *points, int count) const {
   std::vector<std::array<float, 5>> decoded(count);
 
   // The ROS wrapper may pass a reinterpreted __half buffer. Copy the bits
@@ -15,6 +14,7 @@ Preprocessor::forward(const nvtype::half *points, int count) const {
   static_assert(sizeof(nvtype::half) == sizeof(__half_raw));
   const auto *bits = reinterpret_cast<const unsigned char *>(points);
 
+  // TODO: Run all the points in parallel?
   for (auto &point : decoded) {
     for (float &feature : point) {
       __half_raw raw{};

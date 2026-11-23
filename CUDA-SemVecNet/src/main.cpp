@@ -83,7 +83,7 @@ void savePng(const fs::path &path, const cv::Mat &image) {
     throw std::runtime_error("Could not write " + path.string());
 }
 
-void runFrame(semvecnet::SemVecNet &pipeline, std::istream &in, const fs::path &out, std::size_t index) {
+void runFrame(semvecnet::SemVecNet &pipeline, std::istream &in, const fs::path &out, std::size_t index, bool profile) {
   std::uint64_t timestamp;
   std::uint32_t count, width, height, point_count;
   read(in, &timestamp);
@@ -91,8 +91,7 @@ void runFrame(semvecnet::SemVecNet &pipeline, std::istream &in, const fs::path &
   read(in, &width);
   read(in, &height);
   read(in, &point_count);
-  if (count != 8 || !width || !height || width > 8192 || height > 8192 ||
-      !point_count || point_count > 2'000'000)
+  if (count != 8 || !width || !height || width > 8192 || height > 8192 || !point_count || point_count > 2'000'000)
     throw std::runtime_error("Invalid sensor frame dimensions");
 
   std::array<float, 16> lidar_to_map, ego_to_map;
@@ -123,68 +122,74 @@ void runFrame(semvecnet::SemVecNet &pipeline, std::istream &in, const fs::path &
   read(in, points.data(), points.size());
 
   std::vector<std::uint8_t> rgb;
-  const auto polylines = pipeline.forward(images.data(), points.data(), point_count, count,
-                                         width, height, calibrations, lidar_to_map, ego_to_map, &rgb);
+  const auto polylines = pipeline.forward(images.data(), points.data(), point_count, count, width, height, calibrations, lidar_to_map,
+                                          ego_to_map, profile ? nullptr : &rgb);
   std::ostringstream name;
   name << std::setfill('0') << std::setw(6) << index;
   const auto prefix = name.str();
-  const cv::Mat map(semvecnet::semantic_map::kHeight, semvecnet::semantic_map::kWidth, CV_8UC3, rgb.data());
-  cv::Mat bgr_map;
-  cv::cvtColor(map, bgr_map, cv::COLOR_RGB2BGR);
-  std::ofstream json(out / "polylines" / (prefix + ".json"));
-  json.exceptions(std::ios::failbit | std::ios::badbit);
-  json << std::setprecision(std::numeric_limits<float>::max_digits10)
-       << "{\n  \"stamp_ns\": " << timestamp << ",\n"
-       << "  \"pose\": [" << ego_to_map[3] << ", " << ego_to_map[7] << ", " << std::atan2(ego_to_map[4], ego_to_map[0]) << "],\n"
-       << "  \"frame\": \"rear_axle (x fwd, y left, m)\",\n"
-       << "  \"vectors\": [";
-  const auto number = [](float value) {
-    if (!std::isfinite(value))
-      throw std::runtime_error("Non-finite polyline output");
-    return value;
-  };
-  for (std::size_t i = 0; i < polylines.size(); ++i) {
-    const auto &line = polylines[i];
-    json << (i ? ",\n" : "\n") << "    {\"cls\": \"" << kClasses.at(line.label)
-         << "\", \"score\": " << number(line.score) << ", \"pts\": [";
-    for (std::size_t j = 0; j < line.points.size(); ++j) {
-      const auto ego = toEgo(line.points[j]);
-      json << (j ? ", " : "") << '[' << number(ego[0]) << ", " << number(ego[1]) << ']';
+  if (!profile) {
+    const cv::Mat map(semvecnet::semantic_map::kHeight, semvecnet::semantic_map::kWidth, CV_8UC3, rgb.data());
+    cv::Mat bgr_map;
+    cv::cvtColor(map, bgr_map, cv::COLOR_RGB2BGR);
+    std::ofstream json(out / "polylines" / (prefix + ".json"));
+    json.exceptions(std::ios::failbit | std::ios::badbit);
+    json << std::setprecision(std::numeric_limits<float>::max_digits10) << "{\n  \"stamp_ns\": " << timestamp << ",\n"
+         << "  \"pose\": [" << ego_to_map[3] << ", " << ego_to_map[7] << ", " << std::atan2(ego_to_map[4], ego_to_map[0]) << "],\n"
+         << "  \"frame\": \"rear_axle (x fwd, y left, m)\",\n"
+         << "  \"vectors\": [";
+    const auto number = [](float value) {
+      if (!std::isfinite(value))
+        throw std::runtime_error("Non-finite polyline output");
+      return value;
+    };
+    for (std::size_t i = 0; i < polylines.size(); ++i) {
+      const auto &line = polylines[i];
+      json << (i ? ",\n" : "\n") << "    {\"cls\": \"" << kClasses.at(line.label) << "\", \"score\": " << number(line.score)
+           << ", \"pts\": [";
+      for (std::size_t j = 0; j < line.points.size(); ++j) {
+        const auto ego = toEgo(line.points[j]);
+        json << (j ? ", " : "") << '[' << number(ego[0]) << ", " << number(ego[1]) << ']';
+      }
+      json << "]}";
     }
-    json << "]}";
+    json << "\n  ]\n}\n";
+    json.close();
+    savePng(out / "semantic_maps" / (prefix + ".png"), bgr_map);
+    savePng(out / "combined" / (prefix + ".png"), combinedView(bgr_map, polylines));
   }
-  json << "\n  ]\n}\n";
-  json.close();
-  savePng(out / "semantic_maps" / (prefix + ".png"), bgr_map);
-  savePng(out / "combined" / (prefix + ".png"), combinedView(bgr_map, polylines));
   if (index < 2 || (index + 1) % 100 == 0) {
-    const auto observed = cv::countNonZero(map.reshape(1)) / 3; // Palette colors have three nonzero channels.
-    std::cout << prefix << ": " << count << " cameras, " << point_count
-              << " LiDAR points, " << observed << " semantic pixels, " << polylines.size()
-              << " polylines" << std::endl;
+    std::cout << prefix << ": " << count << " cameras, " << point_count << " LiDAR points";
+    if (!profile) {
+      const cv::Mat map(semvecnet::semantic_map::kHeight, semvecnet::semantic_map::kWidth, CV_8UC3, rgb.data());
+      const auto observed = cv::countNonZero(map.reshape(1)) / 3; // Palette colors have three nonzero channels.
+      std::cout << ", " << observed << " semantic pixels";
+    }
+    std::cout << ", " << polylines.size() << " polylines" << std::endl;
   }
 }
 } // namespace
 
 int main(int argc, char **argv) {
-  if (argc != 4) {
-    std::cerr << "Usage: semvecnet HRNET.plan SEMVECNET.onnx OUTPUT_DIR < frames.bin\n"
+  const bool profile = argc == 5 && std::string(argv[4]) == "--profile";
+  if ((argc != 4 && !profile) || (argc == 5 && !profile)) {
+    std::cerr << "Usage: semvecnet HRNET.plan SEMVECNET.onnx OUTPUT_DIR [--profile] < frames.bin\n"
               << "Use tool/run_rosbag_smoke.py to read the ROS bag and run this demo.\n";
     return 2;
   }
   try {
     const fs::path out = argv[3];
-    for (const char *dir : {"polylines", "semantic_maps", "combined"})
-      fs::create_directories(out / dir);
+    if (!profile)
+      for (const char *dir : {"polylines", "semantic_maps", "combined"})
+        fs::create_directories(out / dir);
     semvecnet::SemVecNet pipeline(argv[1], argv[2]);
     std::ios::sync_with_stdio(false);
     std::cin.tie(nullptr);
     std::size_t index = 0;
     while (std::cin.peek() != std::char_traits<char>::eof())
-      runFrame(pipeline, std::cin, out, index++);
+      runFrame(pipeline, std::cin, out, index++, profile);
     if (!index || std::cin.bad())
       throw std::runtime_error("No frames or error reading the frame stream");
-    std::cout << "Wrote " << index << " frame triplets" << std::endl;
+    std::cout << (profile ? "Profiled " : "Wrote ") << index << (profile ? " frames" : " frame triplets") << std::endl;
   } catch (const std::exception &error) {
     std::cerr << "SemVecNet: " << error.what() << '\n';
     return 1;

@@ -261,12 +261,17 @@ def run(args):
               "--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
     subprocess.run([str(PROJECT / "tool/build.sh")], check=True,
                    env={**os.environ, "SEMVECNET_QUIET": "1"})
-    if args.out:
+    if args.profile:
+        out = Path("/tmp/semvecnet-profile-unused")
+    elif args.out:
         out = args.out.expanduser().resolve()
         out.mkdir(parents=True, exist_ok=False)
     else:
         out = Path(tempfile.mkdtemp(prefix="semvecnet-rosbag-", dir=Path.cwd()))
-    print(f"Writing results to {out}", flush=True)
+    if args.profile:
+        print("Profiling only; inference outputs will not be written.", flush=True)
+    else:
+        print(f"Writing results to {out}", flush=True)
     extract_cmd = [
         *docker, "--log-driver", "none",
         "-v", f"{Path(__file__).resolve()}:/extract.py:ro", "-v", f"{bag}:/bag.mcap:ro",
@@ -277,9 +282,13 @@ def run(args):
         *docker, "-i", "--gpus", "all", "--entrypoint", "",
         "-v", f"{PROJECT}:{PROJECT}:ro",
         "-v", f"{plan}:/hrnet.plan:ro", "-v", f"{model}:/semvecnet.onnx:ro",
-        "-v", f"{out}:/output", image, str(PROJECT / "build/semvecnet"),
+        image, str(PROJECT / "build/semvecnet"),
         "/hrnet.plan", "/semvecnet.onnx", "/output",
     ]
+    if not args.profile:
+        infer_cmd[ infer_cmd.index(image):infer_cmd.index(image) ] = ["-v", f"{out}:/output"]
+    if args.profile:
+        infer_cmd.append("--profile")
     with subprocess.Popen(extract_cmd, stdout=subprocess.PIPE) as extractor:
         try:
             with subprocess.Popen(infer_cmd, stdin=extractor.stdout) as inference:
@@ -288,7 +297,8 @@ def run(args):
         finally:
             extractor.stdout.close()
         if status:
-            raise ValueError(f"C++ inference exited with status {status}; partial output: {out}")
+            suffix = "" if args.profile else f"; partial output: {out}"
+            raise ValueError(f"C++ inference exited with status {status}{suffix}")
         if extractor.wait():
             raise ValueError(f"MCAP extraction failed; partial output: {out}")
 
@@ -304,9 +314,13 @@ def main():
                         help="sample count at 0.5 s intervals, or 0 to process every synchronized sweep (default: 2)")
     parser.add_argument("--start", type=float, help="seconds from bag start (default: 0 for all, 0.5 for a sample)")
     parser.add_argument("--out", type=Path, help="new output directory (default: create one in the current directory)")
+    parser.add_argument("--profile", action="store_true",
+                        help="report per-stage timings without writing inference outputs")
     parser.add_argument("--hrnet", type=Path, default=PROJECT / "model/hrnet_ocrnet_mapillary.plan")
     parser.add_argument("--onnx", type=Path, default=PROJECT / "models/semvecnet.onnx")
     args = parser.parse_args()
+    if args.profile and args.out:
+        parser.error("--out cannot be used with --profile")
     if args.start is None:
         args.start = 0.5 if args.frames else 0
     if args.frames < 0 or not math.isfinite(args.start) or args.start < 0:

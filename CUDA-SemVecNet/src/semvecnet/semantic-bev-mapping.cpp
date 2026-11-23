@@ -22,6 +22,7 @@ void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
   std::vector<PendingUpdate> pending_updates;
   pending_updates.reserve(labeled_points.size());
 
+  // TODO: Go through the labeled points in parallel in a kernel?
   for (const auto &association : labeled_points) {
     const int class_index = remapClass(association.class_id);
     if (class_index < 0)
@@ -52,6 +53,7 @@ void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
     pending_updates.push_back({cell_start, class_index, distance_weight, intensity_boost});
   }
 
+  // TODO: Use a sorting algo that runs on the GPU?
   // Stable ordering keeps the original observation order within each group.
   std::stable_sort(pending_updates.begin(), pending_updates.end(), [](const PendingUpdate &a, const PendingUpdate &b) {
     if (a.class_index != b.class_index)

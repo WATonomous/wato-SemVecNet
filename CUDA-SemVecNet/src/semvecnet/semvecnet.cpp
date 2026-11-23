@@ -16,8 +16,8 @@ SemVecNet::SemVecNet(const std::string &hrnet_plan, const std::string &semvecnet
 
 Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nvtype::half *lidar_points, int num_points, int num_cameras,
                              int image_width, int image_height, const std::vector<semantic_projection::CameraCalibration> &calibrations,
-                              const std::array<float, 16> &lidar_to_map, const std::array<float, 16> &ego_to_map,
-                              std::vector<std::uint8_t> *semantic_rgb) {
+                             const std::array<float, 16> &lidar_to_map, const std::array<float, 16> &ego_to_map,
+                             std::vector<std::uint8_t> *semantic_rgb) {
   if (!camera_images || num_cameras <= 0 || image_width <= 0 || image_height <= 0)
     throw std::invalid_argument("Expected RGB8 cameras with positive dimensions");
 
