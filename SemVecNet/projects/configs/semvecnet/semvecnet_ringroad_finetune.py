@@ -18,7 +18,7 @@ data = dict(
 
 optimizer = dict(lr=1e-4)               # nuScenes training started at 6e-4 from ImageNet weights
 lr_config = dict(warmup_iters=100)
-total_epochs = 40
+total_epochs = 60
 runner = dict(max_epochs=total_epochs)
 evaluation = dict(interval=1)           # chamfer mAP on test/ after every epoch; best kept (save_best inherited)
 checkpoint_config = dict(interval=1, max_keep_ckpts=1)

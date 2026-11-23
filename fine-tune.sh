@@ -6,7 +6,7 @@
 #
 # GPU: RTX 3090 only. The SemVecNet image (NGC PyTorch 21.10, CUDA 11.4) cannot initialise CUDA on the
 # RTX 4090 node (trpro-slurm2, driver 580: cuInit returns 999 "unknown error"), while it works on the 3090 nodes.
-#   EPOCHS=60 BATCH=4 LR=1e-4 ./fine-tune.sh      # hyperparameter overrides
+#   EPOCHS=80 BATCH=4 LR=1e-4 ./fine-tune.sh      # hyperparameter overrides
 #   ./fine-tune.sh --local                         # run the job body here (local Docker + GPU), no SLURM
 #
 # On the login node it checks the dataset and the start checkpoint (downloads it with rclone if missing),
@@ -24,7 +24,9 @@
 #   SEMVECNET_FT_OUT   output dir (default ~/semvecnet-finetune/<job id>, ~1 GB; /home quota is 20 GiB)
 #   SEMVECNET_CKPT     start weights (default <repo>/SemVecNet/ckpts/mAP_epoch_99.pth, fetched if missing)
 #   SEMVECNET_DOCKER_GPUS  force the docker --gpus value (skips the GPU search)
-#   EPOCHS (40) BATCH (4) LR (1e-4) WORKERS (4) AUGMENT (1)
+#   EPOCHS (60) BATCH (4) LR (1e-4) WORKERS (4) AUGMENT (1)
+#   CONDITION_REPEAT_CAP (3) DENSE_REPEAT (2): bounded balancing for rare
+#       (light, camera-set, snow) conditions and dense junction/crosswalk/curve maps
 #
 #SBATCH --job-name=semvecnet-finetune
 #SBATCH --cpus-per-task=8
@@ -147,15 +149,16 @@ done
 [ -n "$GPUS" ] || { echo "ERROR: PyTorch cannot use any GPU inside Docker (see above). The SemVecNet image needs an RTX 3090 (--gres shard:rtx_3090:16384,tmpdisk:102400)" >&2; ls -l /dev/nvidia* >&2 || true; exit 1; }
 echo "  using --gpus $GPUS"
 
-step "Fine-tuning (EPOCHS=${EPOCHS:-40} BATCH=${BATCH:-4} LR=${LR:-1e-4} AUGMENT=${AUGMENT:-1}) -> $OUT"
+step "Fine-tuning (EPOCHS=${EPOCHS:-60} BATCH=${BATCH:-4} LR=${LR:-1e-4} AUGMENT=${AUGMENT:-1} CONDITION_REPEAT_CAP=${CONDITION_REPEAT_CAP:-3} DENSE_REPEAT=${DENSE_REPEAT:-2}) -> $OUT"
 mkdir -p "$OUT"
 docker run --rm --gpus "$GPUS" --ipc=host "${USER_ARGS[@]}" \
     -e HOME=/tmp -e MPLCONFIGDIR=/tmp -e PYTHONUNBUFFERED=1 -e PYTHONDONTWRITEBYTECODE=1 -e OMP_NUM_THREADS=1 \
     -v "$REPO/SemVecNet/projects:/workspace/SemVecNet/projects:ro" -v "$REPO/tools:/repo/tools:ro" \
     -v "$CKPT:/weights.pth:ro" -v "$DATASET:/dataset:ro" -v "$OUT:/out" -w /workspace/SemVecNet \
     "$IMAGE" python -u /repo/tools/finetune_ringroad.py --data-root /dataset --output /out --checkpoint /weights.pth \
-        --epochs "${EPOCHS:-40}" --batch "${BATCH:-4}" --lr "${LR:-1e-4}" --workers "${WORKERS:-4}" \
-        --augment "${AUGMENT:-1}" 2>&1 \
+        --epochs "${EPOCHS:-60}" --batch "${BATCH:-4}" --lr "${LR:-1e-4}" --workers "${WORKERS:-4}" \
+        --augment "${AUGMENT:-1}" --condition-repeat-cap "${CONDITION_REPEAT_CAP:-3}" \
+        --dense-repeat "${DENSE_REPEAT:-2}" 2>&1 \
     | grep --line-buffered -v -E '^(=+|NVIDIA Release|PyTorch Version|Container image|Copyright|All rights|Various files|This container|By pulling|https://|NOTE: |   insufficient|   docker run|   Use the NVIDIA|WARNING: The NVIDIA)'
 
 step "Done. Fine-tuned weights: $OUT/ringroad_finetuned.pth"

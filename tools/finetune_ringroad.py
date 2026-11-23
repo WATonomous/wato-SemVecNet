@@ -2,6 +2,7 @@
 import argparse
 import copy
 import csv
+import fnmatch
 import importlib
 import json
 import math
@@ -27,15 +28,53 @@ def parse_args():
     parser.add_argument('--data-root', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--checkpoint', required=True)
-    parser.add_argument('--epochs', type=int, default=40)
+    parser.add_argument('--epochs', type=int, default=60)
     parser.add_argument('--batch', type=int, default=4)
     parser.add_argument('--workers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--augment', type=int, choices=[0, 1], default=1)
+    parser.add_argument('--condition-repeat-cap', type=int, default=3,
+                        help='maximum copies for a rare (light, camera-set, snow) condition; 1 disables condition balancing')
+    parser.add_argument('--dense-repeat', type=int, default=2,
+                        help='copies for dense-area maps (junctions, crosswalks, and tight curves); 1 disables it')
     args = parser.parse_args()
-    if min(args.batch, args.epochs) < 1 or args.workers < 0 or not 0 < args.lr < math.inf:
-        parser.error('epochs, batch and lr must be positive and workers nonnegative')
+    if (min(args.batch, args.epochs, args.condition_repeat_cap, args.dense_repeat) < 1
+            or args.workers < 0 or not 0 < args.lr < math.inf):
+        parser.error('epochs, batch, repeat controls and lr must be positive and workers nonnegative')
     return args
+
+
+def balance_train_infos(dataset, condition_repeat_cap, dense_repeat, snow_patterns=()):
+    """Boundedly duplicate rare conditions and dense geometry examples per epoch.
+
+    The exporter labels ``dense_area`` for maps near a junction/crosswalk or on
+    a tight curve.  Repeated entries are intentionally left as separate dataset
+    samples: the training-only affine augmentation is sampled on each access.
+    Snow patterns are read from a resplit dataset's manifest when available.
+    """
+    infos = dataset.data_infos
+    if not infos or (condition_repeat_cap == 1 and dense_repeat == 1):
+        return
+    def condition(info):
+        snow = 'snow' if any(fnmatch.fnmatch(info['scene_token'], p) for p in snow_patterns) else 'no-snow'
+        return info.get('light', 'unknown'), str(info.get('camera_set', 'unknown')), snow
+    counts = {}
+    for info in infos:
+        key = condition(info)
+        counts[key] = counts.get(key, 0) + 1
+    largest = max(counts.values())
+    balanced = []
+    for info in infos:
+        copies = min(condition_repeat_cap, math.ceil(largest / counts[condition(info)]))
+        if info.get('dense_area'):
+            copies = max(copies, dense_repeat)
+        balanced.extend([info] * copies)
+    dataset.data_infos = balanced
+    summary = ', '.join('{} / {} / {}: {}->{}'.format(light, cameras, snow, count,
+                        count * min(condition_repeat_cap, math.ceil(largest / count)))
+                        for (light, cameras, snow), count in sorted(counts.items()))
+    print('[SAMPLING] condition cap={} dense repeat={}; {} train samples -> {}. {}'.format(
+        condition_repeat_cap, dense_repeat, len(infos), len(balanced), summary), flush=True)
 
 
 def evaluate(model, loader):
@@ -173,6 +212,11 @@ def main():
     cfg.optimizer.lr = args.lr
     cfg.load_from = args.checkpoint
     train = build_dataset(cfg.data.train)
+    manifest_path = Path(cfg.data_root) / 'manifest.json'
+    snow_patterns = ()
+    if manifest_path.exists():
+        snow_patterns = tuple(json.loads(manifest_path.read_text()).get('resplit', {}).get('snow', ()))
+    balance_train_infos(train, args.condition_repeat_cap, args.dense_repeat, snow_patterns)
     train_eval_cfg = copy.deepcopy(cfg.data.test)
     train_eval_cfg.ann_file = cfg.data.train.ann_file
     train_eval_cfg.map_ann_file = cfg.data.train.map_ann_file
@@ -188,9 +232,10 @@ def main():
     # Initialize the shared mmdet logger before the plugin looks it up.
     get_root_logger(log_level=cfg.log_level)
     print('GPU={} train={} train_eval={} iters/epoch={} epochs={} batch={} workers={} '
-          'lr={} fp16={} augment={}'.format(torch.cuda.get_device_name(0), len(train), min(150, len(train)),
-          math.ceil(len(train) / args.batch), args.epochs, args.batch, args.workers, args.lr,
-          cfg.fp16, cfg.data.train.augment), flush=True)
+          'lr={} fp16={} augment={} condition_repeat_cap={} dense_repeat={}'.format(
+              torch.cuda.get_device_name(0), len(train), min(150, len(train)),
+           math.ceil(len(train) / args.batch), args.epochs, args.batch, args.workers, args.lr,
+           cfg.fp16, cfg.data.train.augment, args.condition_repeat_cap, args.dense_repeat), flush=True)
     model = build_model(cfg.model, train_cfg=cfg.get('train_cfg'), test_cfg=cfg.get('test_cfg'))
     # MapTR installs a Pretrained initializer even when the backbone path is None.
     # The runner loads the full starting checkpoint after the normal model initialization.
