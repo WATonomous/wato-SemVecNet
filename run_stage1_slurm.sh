@@ -7,7 +7,7 @@
 # following; the job keeps running). Inside the job it:
 #   1. starts rootless Docker (data in the job's /tmp tmpdisk), pulls the HRNet image and checks the GPU
 #   2. builds the HRNet TensorRT engine for this GPU model once (kept in $SEMVECNET_WORK/assets)
-#   3. for each split of tools/phase1_plan_b.txt: downloads it to /tmp, makes the semantic maps, aligns them to
+#   3. for each split of tools/phase1_plan_all.txt (SEMVECNET_PLAN overrides): downloads it to /tmp, makes the semantic maps, aligns them to
 #      ring_road.osm, deletes the split
 #   4. writes the train/test dataset (semantic maps + Ring Road ground-truth vectors) to <repo>/data
 # Rerunning resumes: finished splits are skipped.

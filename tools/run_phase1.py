@@ -16,10 +16,9 @@ from threading import Thread
 from batch_stage1 import REPO, docker_user, parse_list, run_name
 
 TOOLS = REPO / 'tools'
-PLAN = TOOLS / 'phase1_plan_b.txt'
+PLAN = Path(os.environ.get('SEMVECNET_PLAN', TOOLS / 'phase1_plan_all.txt'))
 OSM = REPO / 'ring_road.osm'
 IMAGE = 'semvecnet-mcap-hrnet:phase1'
-TEST_DRIVE = 'recording_20260224_213947_*'
 
 
 class PreviewHandler(SimpleHTTPRequestHandler):
@@ -52,8 +51,8 @@ def run_phase1(work, cache=None, dataset=None):
     dataset.mkdir(parents=True, exist_ok=True)
     expected = {run_name(split, camset) for split, jobs in parse_list(PLAN).items() for camset, _ in jobs}
     extra = {p.parent.name for p in runs.glob('*/DONE')} - expected
-    if extra:
-        raise RuntimeError(f'Unrelated completed runs in {runs}: {", ".join(sorted(extra))}. Use a dedicated --work-dir.')
+    if extra:  # runs from an older plan are kept and exported too
+        print(f'[Runs] {len(extra)} finished runs not in {PLAN.name} are included: {", ".join(sorted(extra))}', flush=True)
     env = dict(os.environ, SEMVECNET_HRNET_IMAGE=IMAGE, SEMVECNET_ASSETS=str(work / 'assets'))
 
     for cmd in ('docker', 'rclone', 'git'):
@@ -65,7 +64,7 @@ def run_phase1(work, cache=None, dataset=None):
     print('[Setup] Preparing the HRNet image and GPU-specific TensorRT engine', flush=True)
     subprocess.run([REPO / 'run_mcap_pipeline.sh', '--prepare-stage1'], env=env, check=True)
 
-    print('[Bags] Processing Plan B in order (one MCAP split on disk)', flush=True)
+    print(f'[Bags] Processing {PLAN.name} in order (one MCAP split on disk)', flush=True)
     subprocess.run([sys.executable, TOOLS / 'batch_stage1.py', PLAN, '--runs', runs, '--cache', cache,
                     '--osm', OSM, '--offset-image', IMAGE, '--live'], env=env, check=True)
 
@@ -75,13 +74,13 @@ def run_phase1(work, cache=None, dataset=None):
                     '-v', f'{TOOLS}:/repo/tools:ro', '-v', f'{OSM}:/gt/map.osm:ro',
                     '-v', f'{runs}:/runs:ro', '-v', f'{dataset}:/dataset', IMAGE,
                     '/repo/tools/build_finetune_dataset.py', '--runs', '/runs',
-                    '--osm', '/gt/map.osm', '--out', '/dataset', '--test', TEST_DRIVE], check=True)
+                    '--osm', '/gt/map.osm', '--out', '/dataset'], check=True)
     totals = json.loads((dataset / 'manifest.json').read_text())['totals']
     for split in ('train', 'test'):
         if not totals[split]['maps'] or not (dataset / split / f'{split}.pkl').is_file():
             raise RuntimeError(f'{split} export is empty; check per-run filtering in {dataset / "manifest.json"}.')
     print(f'[Done] {totals["train"]["maps"]} train / {totals["test"]["maps"]} test maps '
-          f'(planning estimates: ~250 / ~110). Dataset: {dataset}', flush=True)
+          f'Dataset: {dataset}', flush=True)
 
 
 def main():
