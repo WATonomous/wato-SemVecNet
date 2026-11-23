@@ -12,7 +12,7 @@ The script installs rclone into `~/.local/bin` if it is missing and checks that 
 
 1. Starts rootless Docker (`slurm-start-dockerd.sh`), pulls `naruarjun/tensorrt-nvidia-semseg` into the job's `/tmp` and checks the GPU from inside a container.
 2. Builds the HRNet TensorRT engine once per GPU model (~15 min), in `~/semvecnet-phase1/assets/hrnet_<gpu>.engine`.
-3. For each split in `tools/phase1_plan_b.txt`: downloads it to `/tmp`, makes the semantic maps, aligns them to `ring_road.osm` and deletes the split. The log shows `[i/8]`, the split being downloaded (bytes / % / speed / ETA every 30 s), the run being processed, scan progress and the result.
+3. For each split in `tools/phase1_plan_all.txt` (112 splits; `SEMVECNET_PLAN=tools/phase1_plan_b.txt` for the old eight): downloads it to `/tmp`, makes the semantic maps, aligns them to `ring_road.osm` and deletes the split. The log shows `[i/N]`, the split being downloaded (bytes / % / speed / ETA every 30 s), the run being processed, scan progress and the result.
 4. Writes the dataset to `data/` in the repo: `train/` and `test/` (`maps/`, `labels/` with the Ring Road ground-truth vectors, `train.pkl` / `test.pkl`), `previews/` and `manifest.json`.
 
 If the job hits its time limit or fails, run the script again; finished splits are skipped. Override resources with sbatch options, e.g. `./run_stage1_slurm.sh --gres shard:rtx_3090:16384,tmpdisk:102400` or `--partition=compute_dense --time=3-00:00:00`. `SEMVECNET_WORK` (default `~/semvecnet-phase1`, ~3 GB of assets and per-split runs) and `SEMVECNET_DATA` (default `<repo>/data`) move the outputs. `/home` has a 20 GiB quota, so bags and Docker images never go there.

@@ -1,0 +1,4 @@
+# Smoke test: three bags covering 6-cam night, 6-cam day, and an 8-cam bag whose pose comes from INSPVA (no odom).
+Bags_Perception_Specific/pano_lidar_cc_20261029_190147/pano_lidar_cc_20261029_190147_0.mcap all --expect-cameras 6 --map-hz 5 --near-map  # night, snow snow_unknown, 5 GB
+Bags_Perception_Specific/pano_lidar_cc_20261114_133353/pano_lidar_cc_20261114_133353_0.mcap all --expect-cameras 6 --map-hz 5 --near-map  # day, snow possible, 12 GB
+recording_20260309_211754/recording_20260309_211754_0.mcap pano8 --expect-cameras 8 --map-hz 5 --near-map  # day, snow possible, 20 GB
