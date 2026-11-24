@@ -66,7 +66,7 @@ def run_phase1(work, cache=None, dataset=None):
 
     print(f'[Bags] Processing {PLAN.name} in order (one MCAP split on disk)', flush=True)
     subprocess.run([sys.executable, TOOLS / 'batch_stage1.py', PLAN, '--runs', runs, '--cache', cache,
-                    '--osm', OSM, '--offset-image', IMAGE, '--live'], env=env, check=True)
+                    '--osm', OSM, '--offset-image', IMAGE, '--live', '--keep-going'], env=env, check=True)
 
     print('[Export] Generating ground-truth labels, train/test sets, and overlay previews', flush=True)
     subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'python', *docker_user(),

@@ -151,6 +151,19 @@ def stage1(bag, out, camset, extra, osm, live=False, keep_inputs=False):
         return proc.wait()
 
 
+def off_route(out):
+    """True when stage 1 made no map only because every sweep was off the --near-map map (the bag was recorded
+    away from the mapped roads), from its log line `Done: 0 semantic maps ... skipped: {...}`."""
+    log = out / 'stage1.log'
+    if not log.is_file():
+        return False
+    for line in reversed(log.read_text(errors='replace').splitlines()):
+        if line.startswith('Done: 0 semantic maps'):
+            skipped = line.split('skipped:', 1)[-1]
+            return 'near-map' in skipped and all('near-map' in part for part in skipped.strip(' {}').split(',') if part.strip())
+    return False
+
+
 def offsets(out, osm, image=SVN_IMAGE):
     cmd = ['docker', 'run', '--rm', '--entrypoint', 'python', *docker_user(), '-e', 'HOME=/tmp',
            '-e', 'PYTHONWARNINGS=ignore', '-v', f'{REPO / "tools"}:/repo/tools:ro',
@@ -170,6 +183,8 @@ def main():
     ap.add_argument('--cache', default=str(Path.home() / 'Desktop/data/bag_cache'), help='where splits are downloaded')
     ap.add_argument('--osm', default=str(REPO / 'ring_road.osm'))
     ap.add_argument('--keep', action='store_true', help='keep downloaded splits')
+    ap.add_argument('--keep-going', action='store_true', help='log a failed run and continue with the next split '
+                    '(it has no DONE, so the next batch retries it) instead of stopping')
     ap.add_argument('--no-offset', action='store_true', help='skip the offset estimation')
     ap.add_argument('--prefetch', action='store_true', help='download the next split while the current one is '
                     'processed (two splits on disk at once; default: one at a time)')
@@ -184,7 +199,10 @@ def main():
     jobs = parse_list(args.list)
     runs, cache = Path(args.runs).expanduser(), Path(args.cache).expanduser()
     runs.mkdir(parents=True, exist_ok=True)
-    todo = [(s, v) for s, v in jobs.items() if not all((runs / run_name(s, c) / 'DONE').exists() for c, _ in v)]
+    def finished(out):  # DONE, or SKIPPED: the bag never came near the --near-map map (no maps to make)
+        return (out / 'DONE').exists() or (out / 'SKIPPED').exists()
+
+    todo = [(s, v) for s, v in jobs.items() if not all(finished(runs / run_name(s, c)) for c, _ in v)]
     print(f'{len(jobs)} splits, {sum(len(v) for v in jobs.values())} runs; {len(todo)} splits still to do', flush=True)
     if not args.keep:
         # Recover if interrupted after DONE but before removing the cached download.
@@ -216,12 +234,13 @@ def main():
                 yield fetch(s)
         items = serial()
     log = runs / 'batch_log.jsonl'
+    failed = []
     for split, bag, downloaded, err in items:
         print(f'== {split}', flush=True)
         for camset, extra in jobs[split]:
             name = run_name(split, camset)
             out = runs / name
-            if (out / 'DONE').exists():
+            if finished(out):
                 continue
             rec = dict(split=split, camera_set=camset, run=name, extra=extra, time=time.strftime('%Y-%m-%d %H:%M:%S'))
             if err is not None:
@@ -232,7 +251,11 @@ def main():
                 rc = stage1(bag, out, camset, extra, args.osm, args.live, args.keep_inputs)
                 n = sum(1 for _ in open(out / 'frames.jsonl')) if (out / 'frames.jsonl').exists() else 0
                 rec.update(stage1_rc=rc, keyframes=n, stage1_s=round(time.time() - t))
-                if rc != 0 or n == 0:
+                if n == 0 and off_route(out):
+                    rec['status'] = 'skipped: no keyframe near the map'
+                    out.mkdir(parents=True, exist_ok=True)
+                    (out / 'SKIPPED').write_text(json.dumps(rec, indent=1))
+                elif rc != 0 or n == 0:
                     rec['status'] = 'stage 1 failed'
                 else:
                     if not args.no_offset:
@@ -254,13 +277,17 @@ def main():
             print(f'  -> {name}: {rec["status"]}', flush=True)
             with open(log, 'a') as f:
                 f.write(json.dumps(rec) + '\n')
-            if rec['status'] != 'done':
-                sys.exit(f'{name}: {rec["status"]}; stopped before the next split. See {log}.')
+            if rec['status'] != 'done' and not rec['status'].startswith('skipped'):
+                failed.append(name)
+                if not args.keep_going:
+                    sys.exit(f'{name}: {rec["status"]}; stopped before the next split. See {log}.')
         if downloaded and bag is not None and not args.keep:
             bag.unlink(missing_ok=True)
             print(f'  Deleted cached split {bag.name}', flush=True)
     if args.live:
         progress(f'[{len(jobs)}/{len(jobs)}] All bag splits complete', 1)
+    if failed:
+        print(f'WARNING: {len(failed)} runs failed and are retried on the next run: {", ".join(failed)}', flush=True)
     print(f'Finished. Log: {log}', flush=True)
 
 
