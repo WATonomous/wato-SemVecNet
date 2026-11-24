@@ -68,7 +68,7 @@ while [ $# -gt 0 ]; do
         -o|--out)      OUT="$(realpath -m "$2")"; shift 2 ;;
         --gt)          GT="$2"; shift 2 ;;
         --stages)      STAGES="$2"; shift 2 ;;
-        --max-frames|--hz|--sweep-hz|--render-filter|--pcd-range-max|--cameras|--expect-cameras|--near-map-margin)
+        --max-frames|--hz|--sweep-hz|--render-filter|--pcd-range-max|--lidar-stamp|--sweep-ms|--cameras|--expect-cameras|--near-map-margin)
                        S1+=("$1" "$2"); shift 2 ;;
         --score-thr)   S2+=("$1" "$2"); S3+=("$1" "$2"); shift 2 ;;
         --pose-offset) S3+=("$1" "$2" "$3"); shift 3 ;;

@@ -24,22 +24,24 @@ from mcap_ros2.decoder import DecoderFactory
 from scipy.spatial.transform import Rotation, Slerp
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from mcap_semantic_mapping import LIDAR, ODOM, PANO_GRID, StaticTf, stamp_ns, tf_matrix  # noqa: E402
+from mcap_semantic_mapping import LIDAR, ODOM, PANO_GRID, StaticTf, deskew, stamp_ns, tf_matrix  # noqa: E402
 
 KINDS = {1: 'i1', 2: 'u1', 3: 'i2', 4: 'u2', 5: 'i4', 6: 'u4', 7: 'f4', 8: 'f8'}
 WIDTH = 640  # images are compared at this width
 
 
 def lidar_edges(msg):
-    """Foreground points at range discontinuities along each ring: (3, N) in the LiDAR frame."""
+    """Foreground points at range discontinuities along each ring: (4, N) x, y, z, sweep fraction (LiDAR frame)."""
     f = {x.name: x for x in msg.fields}
     names = [n for n in ('x', 'y', 'z', 'ring') if n in f]
     dt = np.dtype(dict(names=names, formats=['<' + KINDS[f[n].datatype] for n in names],
                        offsets=[f[n].offset for n in names], itemsize=msg.point_step))
     a = np.frombuffer(bytes(msg.data), dtype=dt, count=msg.width * msg.height)
     p = np.stack([a['x'], a['y'], a['z']]).astype(np.float64)
+    frac = np.repeat(np.arange(msg.height) / max(msg.height, 1), msg.width) if msg.height > 1 \
+        else np.arange(len(a)) / max(len(a), 1)
     ok = np.isfinite(p).all(0) & (np.linalg.norm(p, axis=0) > 1.0)
-    p = p[:, ok]
+    p, frac = p[:, ok], frac[ok]
     r = np.linalg.norm(p, axis=0)
     ring = a['ring'][ok] if 'ring' in names else np.round(np.degrees(np.arctan2(p[2], np.hypot(p[0], p[1])))).astype(int)
     az = np.arctan2(p[1], p[0])
@@ -53,8 +55,8 @@ def lidar_edges(msg):
         jump_prev = np.r_[0, rr[:-1] - rr[1:]]  # > 0: previous point farther -> this one is a foreground edge
         jump_next = np.r_[rr[1:] - rr[:-1], 0]
         edge = ((jump_prev > 0.5) | (jump_next > 0.5)) & (rr < 40)
-        out.append(p[:, i[edge]])
-    return np.concatenate(out, 1) if out else np.zeros((3, 0))
+        out.append(np.vstack([p[:, i[edge]], frac[i[edge]]]))
+    return np.concatenate(out, 1) if out else np.zeros((4, 0))
 
 
 def rot(rpy_deg):
@@ -69,6 +71,9 @@ def main():
     ap.add_argument('--out', required=True)
     ap.add_argument('--frames', type=int, default=40, help='sweeps used (1 per second while the car moves)')
     ap.add_argument('--start', type=float, default=0.0, help='seconds to skip from the bag start')
+    ap.add_argument('--lidar-stamp', choices=('end', 'start', 'none'), default='end',
+                    help='per-point LiDAR motion correction, as mcap_semantic_mapping.py --lidar-stamp')
+    ap.add_argument('--score-only', action='store_true', help='only report the alignment of the /tf_static mounts')
     args = ap.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -101,6 +106,14 @@ def main():
         T_l = pose_at(stamp)
         if T_l is None:
             return
+        if args.lidar_stamp == 'none':
+            edges = edges[:3]
+        else:
+            pts = np.vstack([edges[:3], np.zeros(edges.shape[1]), edges[3]])
+            edges = deskew(pts, stamp, 50e6, args.lidar_stamp, pose_at, tf.lookup('base_link', lidar_frame))
+            if edges is None:
+                return
+            edges = edges[:3]
         for c in cams:
             near = [m for m in images[c] if abs(m[0] - stamp) <= 1e8]
             if not near or c not in K:
@@ -174,6 +187,10 @@ def main():
             continue
         best, best_s = np.zeros(3), score(c, np.eye(4))
         base = best_s
+        if args.score_only:
+            lines.append(f'{c.split("/")[1]:16s} edge alignment {base:.3f}')
+            print(lines[-1], flush=True)
+            continue
         for step, span in ((0.5, 3.0), (0.1, 0.5)):  # coarse-to-fine over pitch, yaw, roll
             g = np.arange(-span, span + 1e-9, step)
             centre = best.copy()

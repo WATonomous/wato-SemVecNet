@@ -54,11 +54,36 @@ def read_pointcloud2(msg):
     dtype = np.dtype(dict(names=names, formats=['<' + kinds[fields[n].datatype] for n in names],
                           offsets=[fields[n].offset for n in names], itemsize=msg.point_step))
     arr = np.frombuffer(bytes(msg.data), dtype=dtype, count=msg.width * msg.height)
-    pcd = np.zeros((4, len(arr)))
+    pcd = np.zeros((5, len(arr)))
     for i, n in enumerate(('x', 'y', 'z', 'intensity')):
         if n in names:
             pcd[i] = arr[n]
+    # row 4: when in the sweep each point was measured, 0..1. Our Velodyne leaves its per-point `time` field at 0,
+    # but its cloud is organized by firing (height = firings, width = rings), so the firing row gives the time.
+    pcd[4] = np.repeat(np.arange(msg.height) / max(msg.height, 1), msg.width) if msg.height > 1 \
+        else np.arange(len(arr)) / max(len(arr), 1)
     return pcd[:, np.isfinite(pcd[:3]).all(0)]
+
+
+def deskew(pcd, stamp, sweep_ns, stamp_at, pose_at, T_base_lidar, bins=10):
+    """Move every point to where it would be seen from the LiDAR at `stamp` (Argoverse 2 ships its sweeps like this;
+    nuScenes triggers each camera as the LiDAR passes it). stamp_at: 'start' or 'end' - which end of the sweep the
+    header stamp marks. Returns (4, N) x, y, z, intensity, or None without poses for the whole sweep."""
+    T_ref = pose_at(stamp)
+    if T_ref is None:
+        return None
+    T_ref_inv = np.linalg.inv(T_ref @ T_base_lidar)
+    t = stamp + (pcd[4] - (1.0 if stamp_at == 'end' else 0.0)) * sweep_ns
+    out = pcd[:4].copy()
+    edges = np.linspace(t.min(), t.max() + 1, bins + 1)
+    for a, b in zip(edges[:-1], edges[1:]):
+        sel = (t >= a) & (t < b)
+        T = pose_at((a + b) / 2)
+        if T is None:
+            return None
+        M = T_ref_inv @ T @ T_base_lidar  # LiDAR at the point's time -> LiDAR at the stamp
+        out[:3, sel] = M[:3, :3] @ pcd[:3, sel] + M[:3, 3:4]
+    return out
 
 
 class StaticTf:
@@ -114,6 +139,9 @@ def main():
     ap.add_argument('--hz', type=float, default=2.0, help='rate of the written maps (nuScenes samples are 2 Hz)')
     ap.add_argument('--pcd-range-max', type=float, default=30.0, help='only LiDAR points closer than this (m, '
                     'camera depth) take a label: 30 in the paper\'s own vehicle config (base_cfg.py), 100 in nuscenes_cfg.py')
+    ap.add_argument('--lidar-stamp', choices=('end', 'start', 'none'), default='end', help='which end of the sweep '
+                    'the LiDAR header stamp marks, for the per-point motion correction (none: no correction)')
+    ap.add_argument('--sweep-ms', type=float, default=50.0, help='LiDAR revolution time (20 Hz Velodyne: 50 ms)')
     ap.add_argument('--render-filter', type=int, default=1, help='1: render with DynamicMap.mapping()\'s 3x3 '
                     'smoothing of the class scores (the paper\'s live mapping); 0: unfiltered, as its nuScenes script')
     ap.add_argument('--sweep-hz', type=float, default=20.0, help='LiDAR sweeps mapped per second (the paper maps '
@@ -212,6 +240,17 @@ def main():
         return T
 
     def process(stamp, lidar_frame, pcd, key):
+        if args.lidar_stamp == 'none':
+            pcd = pcd[:4]
+        else:
+            try:
+                pcd = deskew(pcd, stamp, args.sweep_ms * 1e6, args.lidar_stamp, pose_at,
+                             tf.lookup('base_link', lidar_frame))
+            except KeyError:
+                pcd = None
+            if pcd is None:
+                skipped['no ego pose'] += 1
+                return
         nonlocal origin
         T_utm_base = pose_at(stamp)
         if T_utm_base is None:  # no GNSS pose around the sweep
