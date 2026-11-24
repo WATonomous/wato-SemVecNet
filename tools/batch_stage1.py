@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import queue
+import re
 import shlex
 import shutil
 import struct
@@ -151,16 +152,30 @@ def stage1(bag, out, camset, extra, osm, live=False, keep_inputs=False):
         return proc.wait()
 
 
+def seed_static_tf(runs, split, camset, out):
+    """Copy static_tf.json (sensor mounts) from an earlier split of the same recording into `out`: only a
+    recording's first split has /tf_static, so later splits otherwise skip every sweep with 'no TF'."""
+    if (out / 'static_tf.json').is_file():
+        return
+    recording = re.sub(r'_\d+$', '', Path(split).stem)
+    donors = sorted(runs.glob(f'{recording}_*__{camset}/static_tf.json'), key=lambda p: p.stat().st_mtime)
+    if donors:
+        out.mkdir(parents=True, exist_ok=True)
+        shutil.copy(donors[-1], out / 'static_tf.json')
+        print(f'  static TF from {donors[-1].parent.name}', flush=True)
+
+
 def off_route(out):
-    """True when stage 1 made no map only because every sweep was off the --near-map map (the bag was recorded
+    """True when stage 1 made no map because (almost) every sweep was off the --near-map map (the bag was recorded
     away from the mapped roads), from its log line `Done: 0 semantic maps ... skipped: {...}`."""
     log = out / 'stage1.log'
     if not log.is_file():
         return False
     for line in reversed(log.read_text(errors='replace').splitlines()):
         if line.startswith('Done: 0 semantic maps'):
-            skipped = line.split('skipped:', 1)[-1]
-            return 'near-map' in skipped and all('near-map' in part for part in skipped.strip(' {}').split(',') if part.strip())
+            counts = re.findall(r"'([^']+)': (\d+)", line.split('skipped:', 1)[-1])
+            off = sum(int(n) for k, n in counts if 'near-map' in k)
+            return off > 0 and off >= 0.9 * sum(int(n) for _, n in counts)  # a few pose dropouts don't count
     return False
 
 
@@ -248,6 +263,7 @@ def main():
             else:
                 t = time.time()
                 print(f'  Preprocessing {name}; map previews: {out / "maps"}', flush=True)
+                seed_static_tf(runs, split, camset, out)
                 rc = stage1(bag, out, camset, extra, args.osm, args.live, args.keep_inputs)
                 n = sum(1 for _ in open(out / 'frames.jsonl')) if (out / 'frames.jsonl').exists() else 0
                 rec.update(stage1_rc=rc, keyframes=n, stage1_s=round(time.time() - t))

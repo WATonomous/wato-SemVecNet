@@ -38,7 +38,7 @@ from shapely.geometry import Point
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from finetune_common import (MAP_RES, MAP_X, MAP_Y, WorldRaster, class_masks, curb_mask, dedupe,  # noqa: E402
-                             ego_pose_world, load_run, pixels_to_world)
+                             ego_pose_world, load_run, paint_mask, pixels_to_world)
 from mcap_eval_lanelet2 import WorldGT, load_lanelet2  # noqa: E402
 
 # evidence class: (weight, cap m, pixel stride)
@@ -46,6 +46,10 @@ TERMS = dict(lane=(1.0, 1.0, 1), crosswalk=(1.0, 1.5, 2), curb=(1.0, 1.5, 1), ro
 LINE_TERMS = ('lane', 'crosswalk', 'curb')  # the ones that pin the position down; road/sidewalk only help
 MIN_PTS = 50
 LANE_TOL, CURB_TOL = 0.4, 0.5  # m: a paint / curb point "sits on" a map line within this distance (keyframe fit)
+# edge lines are painted inside the curb, which the map's outer lanelet bounds follow: paint within this distance of
+# the road boundary also counts as on a map line (at night HRNet often sees only the edge lines)
+EDGE_TOL = 0.8
+VERSION = 2  # bump when the fit changes, so run_phase1.py recomputes older offset.json files
 MIN_FRAME_PTS = 40             # nearby paint + curb points a keyframe needs for its fit to mean anything
 
 
@@ -70,6 +74,7 @@ def collect(run, frames, origin, gt, max_offmap, near=(12.0, 10.0)):
             continue
         m = class_masks(img)
         m['curb'] = curb_mask(m)
+        m['lane'] = paint_mask(m)
         m = {c: v & keep for c, v in m.items()}
         out.append((f, {c: pixels_to_world(m[c], f, origin, TERMS[c][2]) for c in TERMS}))
     return out
@@ -263,7 +268,10 @@ def estimate(run, osm, window_s, prior, max_offmap, search_m, min_fit, gt_cache=
             ok = n = 0
             for c, tol in (('lane', LANE_TOL), ('curb', CURB_TOL)):
                 if len(p[c]):
-                    ok += int((raster.sample(fields[c], p[c] + d) <= tol).sum())
+                    on = raster.sample(fields[c], p[c] + d) <= tol
+                    if c == 'lane':
+                        on |= raster.sample(fields['curb'], p[c] + d) <= EDGE_TOL
+                    ok += int(on.sum())
                     n += len(p[c])
             rec[key] = round(ok / n, 3) if n else None
         rec['points'] = n
@@ -281,7 +289,7 @@ def estimate(run, osm, window_s, prior, max_offmap, search_m, min_fit, gt_cache=
 
     out = run / 'offset'
     out.mkdir(exist_ok=True)
-    result = dict(run=run.name, osm=str(osm), epsg=epsg, pose_source=meta.get('pose_source'),
+    result = dict(version=VERSION, run=run.name, osm=str(osm), epsg=epsg, pose_source=meta.get('pose_source'),
                   run_offset=[round(float(v), 3) for v in off_run], verdict=verdict,
                   cost_before=round(float(c0), 4), cost_after=round(float(c1), 4),
                   lane_paint_fit=lane, curb_fit=curb,

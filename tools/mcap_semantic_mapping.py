@@ -557,6 +557,13 @@ def main():
     dm = DynamicMap(cfg)
 
     tf = TfBuffer()     # sensor mounts (+ world -> vehicle if the bag publishes it on /tf)
+    # split files after the first of a recording often carry no /tf_static: batch_stage1.py seeds the mounts saved
+    # by an earlier split of the same recording (the bag's own /tf_static, if any, replaces them)
+    static_file = out / 'static_tf.json'
+    if static_file.is_file():
+        for e in json.loads(static_file.read_text()):
+            tf.add(e['parent'], e['child'], 0, np.array(e['T']), static=True)
+        print(f'Seeded {len(tf.static)} static transforms from {static_file.name}')
     odom = TfBuffer()   # odometry topic poses, kept apart so they never clash with the static tree
     odom_child = None
     infos = {}  # camera topic -> (K 3x3, (w, h))
@@ -973,6 +980,9 @@ def main():
                 camera_azimuth_deg=camera_azimuths(),
                 hz=args.hz, skipped=dict(n_skipped), map=dict(res_m=0.2, forward_m=[-30, 30], left_m=[-15, 15]))
     (out / 'meta.json').write_text(json.dumps(meta, indent=2))
+    if tf.static:
+        static_file.write_text(json.dumps([dict(parent=tf.edges[c][0], child=c, T=tf.edges[c][2][0].tolist())
+                                           for c in sorted(tf.static)]))
     print(f'Done: {len(frames)} semantic maps in {out / "maps"} ({time.time() - tic:.0f}s)'
           + (f'  skipped: {dict(n_skipped)}' if n_skipped else ''))
     if not frames:

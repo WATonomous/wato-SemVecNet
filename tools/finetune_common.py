@@ -37,6 +37,16 @@ def curb_mask(masks):
     return masks['road'] & side
 
 
+def paint_mask(masks, max_width_m=0.8):
+    """Lane pixels that can be paint: HRNet also labels large bright areas (snow banks, sunlit concrete) as lane
+    marking, and those blobs - far wider than any painted line - would swamp the real lines in an alignment fit."""
+    lane = masks['lane'].astype(np.uint8)
+    k = int(round(max_width_m / MAP_RES)) | 1
+    blobs = cv2.morphologyEx(lane, cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
+    blobs = cv2.dilate(blobs, np.ones((5, 5), np.uint8))
+    return masks['lane'] & (blobs == 0)
+
+
 def ego_pose_world(frame, origin):
     x, y, yaw = frame['pose']
     return np.array([origin[0] + x, origin[1] + y]), yaw

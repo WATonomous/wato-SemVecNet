@@ -52,7 +52,9 @@ from mcap_eval_lanelet2 import (LIDAR_X_IN_EGO, MAP_CLASSES, Frame, WorldGT, fin
 
 CLASS_BGR = [(0, 165, 255), (255, 0, 0), (0, 0, 255), (0, 200, 0)]  # divider, ped_crossing, boundary, centerline
 MODEL_FRAME = 'x right, y forward, m; origin 0.944 m ahead of the rear axle (nuScenes LIDAR_TOP), as MapTRv2 predicts'
-DEFAULT_SNOW_PATTERNS = ['recording_20260217_*', 'recording_20260224_*']
+# recordings dated December - March (Waterloo winter: snow banks along the Ring Road, which HRNet labels as lane
+# paint and sidewalk, so those semantic maps are too messy to learn from)
+DEFAULT_SNOW_PATTERNS = ['*20[0-9][0-9]12[0-3][0-9]_*', '*20[0-9][0-9]0[1-3][0-3][0-9]_*']
 
 
 def solar_elevation(stamp_ns, lat, lon):
@@ -236,11 +238,14 @@ def main():
     ap.add_argument('--test-fraction', type=float, default=0.2,
                     help='target test fraction of final maps when --test is not supplied (default: 0.2)')
     ap.add_argument('--snow', nargs='*', default=DEFAULT_SNOW_PATTERNS,
-                    help='run-name patterns recorded with snow (default: known February recordings)')
+                    help='run-name patterns recorded with snow (default: recordings dated December - March)')
+    ap.add_argument('--keep-snow', action='store_true', help='export snow runs too (default: leave them out)')
     ap.add_argument('--test-cameras', default='pano8',
                     help='deprecated compatibility option; whole drives now stay in one split')
-    ap.add_argument('--spacing', type=float, default=30.0, help='m of driving between kept keyframes')
-    ap.add_argument('--dense-spacing', type=float, default=15.0, help='m between kept keyframes near junctions, '
+    # 5 m: snow-free Ring Road data is scarce, so neighbouring keyframes overlap heavily (training sees them as
+    # augmented views); the per-drive train/test split keeps that overlap out of the test score
+    ap.add_argument('--spacing', type=float, default=5.0, help='m of driving between kept keyframes')
+    ap.add_argument('--dense-spacing', type=float, default=3.0, help='m between kept keyframes near junctions, '
                     'crosswalks and on tight curves')
     ap.add_argument('--dense-radius', type=float, default=30.0, help='m from a junction / crosswalk that counts as near')
     ap.add_argument('--curve-radius', type=float, default=40.0, help='curves tighter than this radius (m) count as dense')
@@ -248,7 +253,7 @@ def main():
     ap.add_argument('--max-offmap', type=float, default=3.0)
     ap.add_argument('--min-fit', type=float, default=0.5, help='keyframe alignment fit needed (0 = keep all)')
     ap.add_argument('--min-points', type=int, default=40)
-    ap.add_argument('--max-unmapped', type=float, default=0.15)
+    ap.add_argument('--max-unmapped', type=float, default=0.25)
     ap.add_argument('--missing-road-min-area', type=float, default=60.0,
                     help='m2 uncovered observed road that marks a missing junction arm')
     ap.add_argument('--missing-road-min-reach', type=float, default=8.0,
@@ -264,6 +269,11 @@ def main():
 
     runs_dir, out = Path(args.runs), Path(args.out)
     runs = sorted(p for p in runs_dir.iterdir() if (p / 'DONE').exists() and (p / 'frames.jsonl').exists())
+    if not args.keep_snow:
+        snowy = [r.name for r in runs if snow_for(r.name, args.snow)]
+        if snowy:
+            print(f'Leaving out {len(snowy)} snow runs: {", ".join(snowy)}', flush=True)
+        runs = [r for r in runs if r.name not in snowy]
     if not runs:
         sys.exit(f'No finished runs (DONE) in {runs_dir}')
     lanelets, epsg = load_lanelet2(args.osm)

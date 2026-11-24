@@ -13,7 +13,9 @@ import subprocess
 import sys
 from threading import Thread
 
-from batch_stage1 import REPO, docker_user, parse_list, run_name
+import re
+
+from batch_stage1 import REPO, docker_user, offsets, parse_list, run_name
 
 TOOLS = REPO / 'tools'
 PLAN = Path(os.environ.get('SEMVECNET_PLAN', TOOLS / 'phase1_plan_all.txt'))
@@ -67,6 +69,18 @@ def run_phase1(work, cache=None, dataset=None):
     print(f'[Bags] Processing {PLAN.name} in order (one MCAP split on disk)', flush=True)
     subprocess.run([sys.executable, TOOLS / 'batch_stage1.py', PLAN, '--runs', runs, '--cache', cache,
                     '--osm', OSM, '--offset-image', IMAGE, '--live', '--keep-going'], env=env, check=True)
+
+    # offsets from an older estimator (its fit decides which keyframes are kept) are recomputed: no bag needed
+    version = int(re.search(r'^VERSION = (\d+)', (TOOLS / 'mcap_estimate_offset.py').read_text(), re.M).group(1))
+    for done in sorted(runs.glob('*/DONE')):
+        run, oj = done.parent, done.parent / 'offset' / 'offset.json'
+        try:
+            stale = json.loads(oj.read_text()).get('version') != version
+        except (OSError, ValueError):
+            stale = True
+        if stale:
+            print(f'[Offsets] Re-estimating {run.name} (estimator v{version})', flush=True)
+            offsets(run, OSM, IMAGE)
 
     print('[Export] Generating ground-truth labels, train/test sets, and overlay previews', flush=True)
     subprocess.run(['docker', 'run', '--rm', '--entrypoint', 'python', *docker_user(),
