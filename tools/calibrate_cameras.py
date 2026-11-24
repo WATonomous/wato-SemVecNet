@@ -38,10 +38,10 @@ def lidar_edges(msg):
                        offsets=[f[n].offset for n in names], itemsize=msg.point_step))
     a = np.frombuffer(bytes(msg.data), dtype=dt, count=msg.width * msg.height)
     p = np.stack([a['x'], a['y'], a['z']]).astype(np.float64)
-    frac = np.repeat(np.arange(msg.height) / max(msg.height, 1), msg.width) if msg.height > 1 \
-        else np.arange(len(a)) / max(len(a), 1)
     ok = np.isfinite(p).all(0) & (np.linalg.norm(p, axis=0) > 1.0)
-    p, frac = p[:, ok], frac[ok]
+    p = p[:, ok]
+    az0 = np.degrees(np.arctan2(p[1, 0], p[0, 0])) if p.shape[1] else 0.0
+    frac = ((az0 - np.degrees(np.arctan2(p[1], p[0]))) % 360.0) / 360.0  # as mcap_semantic_mapping.read_pointcloud2
     r = np.linalg.norm(p, axis=0)
     ring = a['ring'][ok] if 'ring' in names else np.round(np.degrees(np.arctan2(p[2], np.hypot(p[0], p[1])))).astype(int)
     az = np.arctan2(p[1], p[0])
@@ -88,6 +88,7 @@ def main():
     odom = deque(maxlen=400)
     samples = {c: [] for c in cams}  # (edge points in base frame at image time, edge distance image, image)
     pending, last, t0 = deque(), None, None
+    revolution, last_lidar = [50e6], [None]  # LiDAR message spacing = one revolution
 
     def pose_at(t):
         after = next((i for i, (s, _) in enumerate(odom) if s >= t), None)
@@ -110,7 +111,7 @@ def main():
             edges = edges[:3]
         else:
             pts = np.vstack([edges[:3], np.zeros(edges.shape[1]), edges[3]])
-            edges = deskew(pts, stamp, 50e6, args.lidar_stamp, pose_at, tf.lookup('base_link', lidar_frame))
+            edges = deskew(pts, stamp, revolution[0], args.lidar_stamp, pose_at, tf.lookup('base_link', lidar_frame))
             if edges is None:
                 return
             edges = edges[:3]
@@ -151,6 +152,9 @@ def main():
             elif t == LIDAR:
                 s = stamp_ns(msg.header)
                 t0 = t0 or s
+                if last_lidar[0] is not None and 0 < s - last_lidar[0] < 2e8:
+                    revolution[0] = s - last_lidar[0]
+                last_lidar[0] = s
                 moving = len(odom) > 10 and np.linalg.norm(odom[-1][1][:3, 3] - odom[-10][1][:3, 3]) > 0.3
                 if (s - t0) / 1e9 >= args.start and moving and (last is None or s - last >= 1e9):
                     last = s

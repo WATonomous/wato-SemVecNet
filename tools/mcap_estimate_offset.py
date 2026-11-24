@@ -42,14 +42,16 @@ from finetune_common import (MAP_RES, MAP_X, MAP_Y, WorldRaster, class_masks, cu
 from mcap_eval_lanelet2 import WorldGT, load_lanelet2  # noqa: E402
 
 # evidence class: (weight, cap m, pixel stride)
-TERMS = dict(lane=(1.0, 1.0, 1), crosswalk=(1.0, 1.5, 2), curb=(1.0, 1.5, 1), road=(0.5, 1.5, 3), sidewalk=(0.5, 1.5, 2))
+# Painted lines pin the position down; the road / sidewalk edges of the smoothed semantic maps (stage 1 renders with
+# the paper's 3x3 filter) sit ~0.5-1 m off the map's boundaries and pulled the offsets away from the paint.
+TERMS = dict(lane=(1.0, 1.0, 1), crosswalk=(1.0, 1.5, 2), curb=(0.3, 1.5, 1), road=(0.0, 1.5, 3), sidewalk=(0.0, 1.5, 2))
 LINE_TERMS = ('lane', 'crosswalk', 'curb')  # the ones that pin the position down; road/sidewalk only help
 MIN_PTS = 50
 LANE_TOL, CURB_TOL = 0.4, 0.5  # m: a paint / curb point "sits on" a map line within this distance (keyframe fit)
 # edge lines are painted inside the curb, which the map's outer lanelet bounds follow: paint within this distance of
 # the road boundary also counts as on a map line (at night HRNet often sees only the edge lines)
 EDGE_TOL = 0.8
-VERSION = 2  # bump when the fit changes, so run_phase1.py recomputes older offset.json files
+VERSION = 3  # bump when the fit changes, so run_phase1.py recomputes older offset.json files
 MIN_FRAME_PTS = 40             # nearby paint + curb points a keyframe needs for its fit to mean anything
 
 

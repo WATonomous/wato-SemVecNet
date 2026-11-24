@@ -113,3 +113,8 @@ recording_20261004_185825/recording_20261004_185825_0.mcap pano8 --expect-camera
 # cameras drop out (2-6 of 8): recording_20261004_185825/recording_20261004_185825_5.mcap pano8 --expect-cameras 8 --near-map  # dusk, snow snow_unknown, 22 GB
 # cameras drop out (2-6 of 8): recording_20261004_185825/recording_20261004_185825_6.mcap pano8 --expect-cameras 8 --near-map  # dusk, snow snow_unknown, 5 GB
 ring_road_corrected/ring_road_corrected_0.mcap all --expect-cameras 6 --near-map  # day, snow snow_unknown, 70 GB
+"2026 November 24 (VLS-128 Uncalibrated)/ring road run/pano_lidar_cc_20261124_130958_0.mcap" pano8 --expect-cameras 8 --near-map  # day, VLS-128 10 Hz LiDAR (uncalibrated), 21 GB
+"2026 November 24 (VLS-128 Uncalibrated)/ring road run/pano_lidar_cc_20261124_130958_1.mcap" pano8 --expect-cameras 8 --near-map  # day, VLS-128 10 Hz LiDAR (uncalibrated), 21 GB
+"2026 November 24 (VLS-128 Uncalibrated)/ring road run/pano_lidar_cc_20261124_130958_2.mcap" pano8 --expect-cameras 8 --near-map  # day, VLS-128 10 Hz LiDAR (uncalibrated), 21 GB
+"2026 November 24 (VLS-128 Uncalibrated)/ring road run/pano_lidar_cc_20261124_130958_3.mcap" pano8 --expect-cameras 8 --near-map  # day, VLS-128 10 Hz LiDAR (uncalibrated), 21 GB
+"2026 November 24 (VLS-128 Uncalibrated)/ring road run/pano_lidar_cc_20261124_130958_4.mcap" pano8 --expect-cameras 8 --near-map  # day, VLS-128 10 Hz LiDAR (uncalibrated), 19 GB

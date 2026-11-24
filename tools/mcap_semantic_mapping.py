@@ -58,11 +58,14 @@ def read_pointcloud2(msg):
     for i, n in enumerate(('x', 'y', 'z', 'intensity')):
         if n in names:
             pcd[i] = arr[n]
-    # row 4: when in the sweep each point was measured, 0..1. Our Velodyne leaves its per-point `time` field at 0,
-    # but its cloud is organized by firing (height = firings, width = rings), so the firing row gives the time.
-    pcd[4] = np.repeat(np.arange(msg.height) / max(msg.height, 1), msg.width) if msg.height > 1 \
-        else np.arange(len(arr)) / max(len(arr), 1)
-    return pcd[:, np.isfinite(pcd[:3]).all(0)]
+    pcd = pcd[:, np.isfinite(pcd[:3]).all(0)]
+    # row 4: when in the sweep each point was measured, 0..1. Our Velodynes leave their per-point `time` field at 0, so
+    # it comes from the rotation: they spin clockwise seen from above (azimuth decreasing) from the first point stored
+    # (the VLP-32C at 20 Hz and the VLS-128 at 10 Hz alike, whatever the cloud's row layout)
+    if pcd.shape[1]:
+        az = np.degrees(np.arctan2(pcd[1], pcd[0]))
+        pcd[4] = ((az[0] - az) % 360.0) / 360.0
+    return pcd
 
 
 def deskew(pcd, stamp, sweep_ns, stamp_at, pose_at, T_base_lidar, bins=10):
@@ -141,7 +144,8 @@ def main():
                     'camera depth) take a label: 30 in the paper\'s own vehicle config (base_cfg.py), 100 in nuscenes_cfg.py')
     ap.add_argument('--lidar-stamp', choices=('end', 'start', 'none'), default='end', help='which end of the sweep '
                     'the LiDAR header stamp marks, for the per-point motion correction (none: no correction)')
-    ap.add_argument('--sweep-ms', type=float, default=50.0, help='LiDAR revolution time (20 Hz Velodyne: 50 ms)')
+    ap.add_argument('--sweep-ms', type=float, default=0.0, help='LiDAR revolution time, ms (0: measured from the '
+                    'spacing of the LiDAR messages - 50 ms for the 20 Hz VLP-32C, 100 ms for the 10 Hz VLS-128)')
     ap.add_argument('--render-filter', type=int, default=1, help='1: render with DynamicMap.mapping()\'s 3x3 '
                     'smoothing of the class scores (the paper\'s live mapping); 0: unfiltered, as its nuScenes script')
     ap.add_argument('--sweep-hz', type=float, default=20.0, help='LiDAR sweeps mapped per second (the paper maps '
@@ -219,6 +223,7 @@ def main():
     origin = None
     period, last_key = int(1e9 / args.hz), None
     sweep_period, last_sweep = int(1e9 / max(args.sweep_hz, args.hz)), None
+    last_lidar, revolution_ns = None, 50e6  # LiDAR message spacing = one revolution (updated from the bag)
     tic = time.time()
     fjson = open(out / 'frames.jsonl', 'w')
 
@@ -239,12 +244,12 @@ def main():
         T[:3, :3] = Slerp([0, 1], Rotation.from_matrix([T0[:3, :3], T1[:3, :3]]))([w]).as_matrix()[0]
         return T
 
-    def process(stamp, lidar_frame, pcd, key):
+    def process(stamp, lidar_frame, pcd, key, sweep_ns):
         if args.lidar_stamp == 'none':
             pcd = pcd[:4]
         else:
             try:
-                pcd = deskew(pcd, stamp, args.sweep_ms * 1e6, args.lidar_stamp, pose_at,
+                pcd = deskew(pcd, stamp, sweep_ns, args.lidar_stamp, pose_at,
                              tf.lookup('base_link', lidar_frame))
             except KeyError:
                 pcd = None
@@ -347,11 +352,15 @@ def main():
             elif t == LIDAR:
                 s = stamp_ns(msg.header)
                 t0 = t0 or s
+                if last_lidar is not None and 0 < s - last_lidar < 2e8:  # one revolution: 50 ms (20 Hz), 100 ms (10 Hz)
+                    revolution_ns = s - last_lidar
+                last_lidar = s
                 if last_sweep is None or s - last_sweep >= sweep_period * 0.9:
                     last_sweep = s
                     key = last_key is None or s - last_key >= period * 0.95
                     last_key = s if key else last_key
-                    pending.append((s, msg.header.frame_id.lstrip('/'), read_pointcloud2(msg), key))
+                    pending.append((s, msg.header.frame_id.lstrip('/'), read_pointcloud2(msg), key,
+                                    args.sweep_ms * 1e6 if args.sweep_ms > 0 else revolution_ns))
                     if key and int((s - t0) / 1e9) % 15 == 0:
                         print(f'  scan t+{(s - t0) / 1e9:.1f}s', flush=True)
             # a keyframe is mapped once the cameras have caught up with it
