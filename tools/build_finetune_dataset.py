@@ -240,6 +240,7 @@ def main():
     ap.add_argument('--snow', nargs='*', default=DEFAULT_SNOW_PATTERNS,
                     help='run-name patterns recorded with snow (default: recordings dated December - March)')
     ap.add_argument('--keep-snow', action='store_true', help='export snow runs too (default: leave them out)')
+    ap.add_argument('--keep-night', action='store_true', help='export night keyframes too (default: leave them out)')
     ap.add_argument('--test-cameras', default='pano8',
                     help='deprecated compatibility option; whole drives now stay in one split')
     # 5 m: snow-free Ring Road data is scarce, so neighbouring keyframes overlap heavily (training sees them as
@@ -291,7 +292,12 @@ def main():
     run_meta = {}
     for run in runs:
         meta, _ = load_run(run)
-        selected[run] = select(run, gt, dense_geoms, junctions, args)
+        kept, drops = select(run, gt, dense_geoms, junctions, args)
+        if not args.keep_night:  # HRNet labels most of a dark scene as road: those maps are unreadable
+            day = [k for k in kept if light(k[0]['stamp_ns'], lat, lon) != 'night']
+            drops['night'] = len(kept) - len(day)
+            kept = day
+        selected[run] = (kept, drops)
         run_meta[run] = meta
 
     by_drive = {}

@@ -131,8 +131,6 @@ def stage1(bag, out, camset, extra, osm, live=False, keep_inputs=False):
     cams = PRESETS[camset] if camset in PRESETS else camset.split(',')
     cmd = [str(REPO / 'run_mcap_pipeline.sh'), str(bag), '-o', str(out), '--stages', '1', '--gt', str(osm)] + \
           (['--cameras', ','.join(cams)] if cams else []) + extra
-    if not keep_inputs:
-        cmd += ['--no-inputs']
     print('  $ ' + ' '.join(shlex.quote(c) for c in cmd), flush=True)
     if not live:
         return subprocess.run(cmd).returncode

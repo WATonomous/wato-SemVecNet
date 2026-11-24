@@ -17,24 +17,10 @@
 #   -o, --out DIR        run directory        (default: $SEMVECNET_RUNS/<bag name>, SEMVECNET_RUNS=~/Desktop/data/semvecnet_runs)
 #   --gt FILE|none       Lanelet2 .osm         (default: ./ring_road.osm)
 #   --stages 123         stages to run, e.g. --stages 23 re-runs inference + evaluation on an existing run
-#   --start S            skip the first S seconds of the bag
-#   --duration S         process S seconds
 #   --max-frames N       stop after N keyframes
-#   --hz H               keyframe rate        (default 2, the nuScenes keyframe rate the model was trained on)
-#   --min-move M         Minimum XY distance between written keyframes (default 2 m; 0 disables)
-#   --min-sweep-move M   Minimum XY distance from the last processed sweep for map-only sweeps (default 0.25 m; 0 disables)
-#   --map-hz H           LiDAR sweeps/s labelled into the semantic map (default 10; 2 = original nuScenes recipe)
-#   --camera-ground 0|1  also paint camera labels onto the road plane (dense, sees thin paint)   (default 1)
-#   --camera-classes C   which classes come from the camera: all | e.g. lane,crosswalk   (default all)
-#   --camera-range M     max distance of camera ground labels (default 25 m)
-#   --cameras A,B        camera names, e.g. camera_pano_nn,camera_pano_ne (names not in the bag are skipped; default:
-#                        every camera with a camera_info - image_rect_compressed, else raw image_rect/image_raw)
-#   --lidar-topic T      (default: auto, /lidar/all/points_merged - all LiDARs fused - else /lidar_cc/velodyne_points)
-#   --odom-topic T       (default: auto, /novatel/oem7/odom - UTM, which is what the map is compared in)
-#   --pose-source S      auto|odom|tf|inspva  (default auto: GNSS odometry, else NovAtel INSPVA converted to UTM,
-#                        else /tf world frame, else any odometry)
-#   --inspva-topic T     (default /novatel/oem7/inspva; used when the bag has no /novatel/oem7/odom)
-#   --ego-frame F        map centre           (default: rear_axle if in TF, like nuScenes' ego frame)
+#   --hz H               keyframe rate        (default 2, the nuScenes sample rate the model was trained on)
+#   --cameras A,B        all | pano8 | camera_pano_nn,camera_pano_ne,...  (default: every roof camera)
+#   --expect-cameras N   fail if the bag does not have N of those cameras
 #   --score-thr T        score threshold for drawn vectors and precision/recall (default 0.4; AP uses all)
 #   --class-thr C=T,...  per-class overrides of --score-thr (default divider=0.1: SemVecNet finds dividers
 #                        in the right place but with low confidence on this car's maps)
@@ -82,10 +68,8 @@ while [ $# -gt 0 ]; do
         -o|--out)      OUT="$(realpath -m "$2")"; shift 2 ;;
         --gt)          GT="$2"; shift 2 ;;
         --stages)      STAGES="$2"; shift 2 ;;
-        --start|--duration|--max-frames|--hz|--map-hz|--min-move|--min-sweep-move|--cameras|--lidar-topic|--odom-topic|--pose-source|--inspva-topic|--near-map-margin|--ego-frame|\
-        --camera-ground|--camera-classes|--camera-range|--expect-cameras)
+        --max-frames|--hz|--sweep-hz|--render-filter|--pcd-range-max|--cameras|--expect-cameras|--near-map-margin)
                        S1+=("$1" "$2"); shift 2 ;;
-        --no-inputs)   S1+=("$1"); shift ;;
         --score-thr)   S2+=("$1" "$2"); S3+=("$1" "$2"); shift 2 ;;
         --pose-offset) S3+=("$1" "$2" "$3"); shift 3 ;;
         --class-thr)   CLASS_THR="$2"; shift 2 ;;

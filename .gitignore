@@ -144,3 +144,5 @@ dmypy.json
 .pyre/
 
 cluster.sh
+CUDA-SemVecNet/models/
+CUDA-SemVecNet/.sysroot/opencv/
