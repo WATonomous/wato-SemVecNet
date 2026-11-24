@@ -79,6 +79,31 @@ def camera_set(run_dir):
     return run_dir.name.rsplit('__', 1)[-1] if '__' in run_dir.name else None
 
 
+def check_image(run_dir, frame, sem_bgr, vectors, title, scale=3):
+    """One image to verify a training map: the cameras (all of them for new runs, else the front camera with its
+    segmentation) | the semantic map | the map dimmed with the ground-truth polylines drawn on."""
+    sem = cv2.resize(sem_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
+    with_gt = draw_preview(sem_bgr, vectors, '', scale)
+    h = sem.shape[0]
+    panels = []
+    cam_rel = frame.get('cams_all') or frame.get('front')
+    cam = cv2.imread(str(run_dir / cam_rel)) if cam_rel else None
+    if cam is not None:
+        panels.append(cv2.resize(cam, (int(cam.shape[1] * h / cam.shape[0]), h), interpolation=cv2.INTER_AREA))
+    sep = np.full((h, 6, 3), 255, np.uint8)
+    for p in (sem, with_gt):
+        panels += [sep, p] if panels else [p]
+    img = np.hstack(panels)
+    bar = np.zeros((26, img.shape[1], 3), np.uint8)
+    cv2.putText(bar, title, (6, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    x = img.shape[1] - 4 * 120
+    for name, bgr in zip(MAP_CLASSES, CLASS_BGR):  # legend for the polyline colours
+        cv2.line(bar, (x, 13), (x + 18, 13), bgr, 3)
+        cv2.putText(bar, name, (x + 22, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        x += 120
+    return np.vstack([bar, img])
+
+
 def draw_preview(sem_bgr, vectors, title, scale=3):
     m = cv2.resize(sem_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_NEAREST)
     m = (0.6 * m).astype(np.uint8)
@@ -230,6 +255,8 @@ def main():
                     help='m an uncovered patch must extend beyond mapped road')
     ap.add_argument('--no-offset', action='store_true', help='ignore offset/offset.json (raw GNSS poses)')
     ap.add_argument('--previews', type=int, default=24, help='preview images per split')
+    ap.add_argument('--no-check', action='store_true', help='skip check/<split>/<run>/<idx>.jpg (cameras | semantic '
+                    'map | map with ground-truth polylines, one per kept map)')
     ap.add_argument('--dry-run', action='store_true', help='report selections and split counts without writing --out')
     args = ap.parse_args()
     if not 0 < args.test_fraction < 1:
@@ -302,7 +329,7 @@ def main():
         return 'test' if run.name.rsplit('__', 1)[0] in test_drives else 'train'
 
     if not args.dry_run:
-        for sub in ('train', 'test', 'previews', 'manifest.json'):  # only what this tool writes
+        for sub in ('train', 'test', 'previews', 'check', 'manifest.json'):  # only what this tool writes
             p = out / sub
             if p.is_dir():
                 shutil.rmtree(p)
@@ -335,6 +362,14 @@ def main():
                 (out / split / 'labels' / run.name).mkdir(parents=True, exist_ok=True)
                 shutil.copy2(run / f['map'], out / split / rel_map)
                 (out / split / 'labels' / run.name / f'{idx}.json').write_text(json.dumps(label))
+                if not args.no_check:
+                    (out / 'check' / split / run.name).mkdir(parents=True, exist_ok=True)
+                    title = (f'{run.name} #{f["idx"]}  {split}  {lt}{"  snow" if label["snow"] else ""}  {cams} cams  '
+                             f'fit {"-" if fit is None else round(fit, 2)}'
+                             f'{f"  {junction_legs}-way junction" if junction_legs else ""}')
+                    cv2.imwrite(str(out / 'check' / split / run.name / f'{idx}.jpg'),
+                                check_image(run, f, cv2.imread(str(run / f['map'])), label['vectors'], title),
+                                [cv2.IMWRITE_JPEG_QUALITY, 80])
             infos[split].append(dict(
                 token=label['token'], scene_token=run.name, frame_idx=len(infos[split]), timestamp=f['stamp_ns'] / 1e9,
                 sem_path=rel_map, ego_xy=np.array(ego_c, np.float64), yaw=yaw, camera_set=label['camera_set'],

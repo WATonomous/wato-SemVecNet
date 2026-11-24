@@ -287,6 +287,36 @@ def camera_name(image_topic):
     return re.sub(r'/(rgb|color|image)$', '', ns).strip('/').replace('/', '_')
 
 
+PANO_GRID = [['nw', 'nn', 'ne'], ['ww', None, 'ee'], ['sw', 'ss', 'se']]  # roof cameras laid out as seen from above
+
+
+def camera_mosaic(raw_imgs, tile_w=224):
+    """BGR 3x3 grid of the RGB camera images, each in its roof position (front at top centre), labelled;
+    cameras that are not camera_pano_* fill the empty slots."""
+    tiles = {}
+    for topic, im in raw_imgs.items():
+        name = camera_name(topic)
+        t = cv2.resize(cv2.cvtColor(im, cv2.COLOR_RGB2BGR), (tile_w, int(tile_w * im.shape[0] / im.shape[1])),
+                       interpolation=cv2.INTER_AREA)
+        cv2.putText(t, name, (5, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(t, name, (5, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        tiles[name.replace('camera_pano_', '')] = t
+    tile_h = max(t.shape[0] for t in tiles.values())
+    blank = np.zeros((tile_h, tile_w, 3), np.uint8)
+    extra = [k for k in tiles if k not in {c for row in PANO_GRID for c in row}]
+    rows = []
+    for row in PANO_GRID:
+        cells = []
+        for c in row:
+            t = tiles.get(c) if c else None
+            if t is None and extra:
+                t = tiles[extra.pop(0)]
+            t = blank if t is None else t
+            cells.append(cv2.copyMakeBorder(t, 0, tile_h - t.shape[0], 0, 0, cv2.BORDER_CONSTANT))
+        rows.append(np.hstack(cells))
+    return np.vstack(rows)
+
+
 def is_rectified(image_topic):
     return next(r for s, _, r in IMAGE_TOPICS if image_topic.endswith(s))
 
@@ -781,6 +811,9 @@ def main():
             f = cv2.resize(f, (640, int(640 * f.shape[0] / f.shape[1])), interpolation=cv2.INTER_AREA)
             cv2.imwrite(str(out / 'cams' / f'{idx:06d}.jpg'), f, [cv2.IMWRITE_JPEG_QUALITY, 85])
             rec['front'] = f'cams/{idx:06d}.jpg'
+        if raw_imgs:  # every camera used for this map, small, for the dataset's alignment check images
+            cv2.imwrite(str(out / 'cams' / f'{idx:06d}_all.jpg'), camera_mosaic(raw_imgs), [cv2.IMWRITE_JPEG_QUALITY, 75])
+            rec['cams_all'] = f'cams/{idx:06d}_all.jpg'
         frames.append(rec)
         with open(out / 'frames.jsonl', 'a') as fh:
             fh.write(json.dumps(rec) + '\n')
