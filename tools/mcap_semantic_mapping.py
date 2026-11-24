@@ -233,7 +233,7 @@ def main():
         (s0, T0), (s1, T1) = odom[after - 1], odom[after]
         if s1 - s0 > 1e8:
             return None
-        w = (t - s0) / max(s1 - s0, 1)
+        w = min(max((t - s0) / max(s1 - s0, 1), 0.0), 1.0)  # GNSS messages can arrive slightly out of order
         T = np.eye(4)
         T[:3, 3] = (1 - w) * T0[:3, 3] + w * T1[:3, 3]
         T[:3, :3] = Slerp([0, 1], Rotation.from_matrix([T0[:3, :3], T1[:3, :3]]))([w]).as_matrix()[0]
