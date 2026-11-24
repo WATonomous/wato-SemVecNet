@@ -142,6 +142,9 @@ void Mapper::updateMapOrigin(const Origin &origin) {
 
 int Mapper::remapClass(std::int64_t class_id) const {
   // Merge zebra line into crosswalk and bike lane into road.
+  // TODO: keep these in sync with base_cfg.py
+  // COLOR_REMAP_SOURCE/COLOR_REMAP_DEST. Any new source class added in Python
+  // must also be remapped here.
   if (class_id == 23)
     class_id = 8;
   else if (class_id == 7)

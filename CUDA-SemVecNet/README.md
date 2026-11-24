@@ -93,11 +93,14 @@ Each frame has the same six-digit filename stem in three directories:
 - `combined/`: the semantic map next to the predicted polylines on the same
   extent, using the Python comparison view's class colors.
 
-The C++ mapper accumulates sweeps throughout the run. It paints LiDAR returns;
-the Python pipeline can additionally project camera pixels onto the road
-plane, so the C++ maps can be sparser. Predictions use the C++ score filter,
-so a vector list can be empty. The full run reports sweeps skipped for
-missing camera synchronization or odometry rather than filling in data.
+Both the C++ mapper and Python's `DynamicMap.project_pcd` paint labeled LiDAR
+returns; Python does not raycast camera pixels onto the road plane. Python maps
+look denser mainly because a full run accumulates many sweeps, while a mid-bag
+run starts with an empty mapper. Python's nuScenes config also labels points up
+to 100 m camera-Z depth, versus 30 m in this port (see the TODO in
+`include/semvecnet/base-config.hpp`). Predictions use the C++ score filter, so
+a vector list can be empty. The full run reports sweeps skipped for missing
+camera synchronization or odometry rather than filling in data.
 
 The script uses Docker with NVIDIA GPU support, the existing
 `semvecnet-mcap-hrnet:latest` reader image, `model/hrnet_ocrnet_mapillary.plan`,

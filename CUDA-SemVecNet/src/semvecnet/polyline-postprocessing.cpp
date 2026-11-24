@@ -10,6 +10,10 @@
 namespace semvecnet::postprocessing {
 
 std::vector<Polyline> Postprocessor::forward(const model::DecoderOutput &predictions) const {
+  // TODO: match the Python full-map path. tools/infer_bevfusion.py runs 5x3 tiles,
+  // clips each prediction to its tile core, drops vectors without semantic
+  // support, stitches same-class lines across seams and de-duplicates them.
+  // This port only thresholds and range-filters a single ego crop.
   constexpr std::size_t num_queries = 70;
   constexpr std::size_t num_classes = 4;
   constexpr std::size_t num_points = 20;

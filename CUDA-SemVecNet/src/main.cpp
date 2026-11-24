@@ -30,6 +30,9 @@ std::array<float, 2> toEgo(const std::array<float, 2> &point) {
 }
 
 cv::Mat combinedView(const cv::Mat &map, const semvecnet::Polylines &lines) {
+  // TODO: match the Python visualization. tools/infer_bevfusion.py visualizes the
+  // BEVFusion input, SemVecNet input and vectors/Voronoi panels and draws
+  // centerline arrows. This C++ view only shows semantic map + polylines.
   constexpr double scale = 2.4;
   constexpr int header = 30;
   constexpr int footer = 30;

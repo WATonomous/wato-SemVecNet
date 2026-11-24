@@ -12,6 +12,9 @@ inline constexpr int kHrnetChannels = 3;
 inline constexpr std::array<float, 3> kHrnetMean = {0.485f, 0.456f, 0.406f};
 inline constexpr std::array<float, 3> kHrnetStd = {0.229f, 0.224f, 0.225f};
 // Maximum projection depth, in metres along camera Z.
+// TODO: nuscenes_cfg.py overrides MAPPING.PCD.RANGE_MAX to 100.0.
+// This port uses 30.0, so LiDAR points whose camera-Z depth is 30..100 m never
+// reach the semantic map. Change this to 100.0 for parity with the Python run.
 inline constexpr float kProjectionMaxDepth = 30.0f;
 
 // Exported SemVecNet model's point_cloud_range, in metres: [xmin, ymin, xmax, ymax].

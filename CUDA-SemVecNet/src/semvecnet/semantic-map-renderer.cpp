@@ -24,6 +24,10 @@ model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const s
   const float center_y = std::nearbyint((ego_to_map[7] - grid.origin_y) / grid.resolution);
 
   // Rotate the ego-aligned output view into the map's coordinate frame.
+  // TODO: match Python DynamicMap.render_local_map. It applies a 3x3 mean filter
+  // (renderer.apply_filter) when its `filter` argument is true. The nuScenes
+  // mapping path passes filter=False, which is what this port matches; add the
+  // filter here only if we need parity with the generic/single-camera path.
   const float yaw = std::atan2(ego_to_map[4], ego_to_map[5]);
   const float cosine = std::cos(yaw);
   const float sine = std::sin(yaw);

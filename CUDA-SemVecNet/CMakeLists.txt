@@ -66,7 +66,7 @@ if(SEMVECNET_CORE_SOURCES)
   add_library(semvecnet_core SHARED ${SEMVECNET_CORE_SOURCES})
   target_link_libraries(semvecnet_core
     PUBLIC ONNXRuntime::ONNXRuntime
-    PRIVATE opencv_core opencv_imgproc
+    PRIVATE opencv_core opencv_imgproc CUDA::nvtx3  # header-only NVTX ranges for profiling
   )
   set(_scope PUBLIC)
 else()

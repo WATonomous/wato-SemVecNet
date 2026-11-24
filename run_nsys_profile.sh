@@ -5,28 +5,31 @@
 #
 # Defaults:
 #   BAG    = ~/Desktop/data/bags/may_30_ring_road_test_5
-#   FRAMES = 3
+#   FRAMES = 10 (frame 0 is a warm-up and is left out of the statistics)
 #   START  = middle of the bag (first synchronized frame at or after it)
 #   OUT    = ./nsys_reports/<timestamp>-<bag name>
 #
 # The bag is decoded by semvecnet-mcap-hrnet, then only the C++ inference
 # executable is profiled (bag decoding is not in the nsys trace):
 #
-#   nsys profile --stats=true --trace=cuda,cudnn,cublas,osrt ./build/semvecnet
+#   nsys profile --trace=nvtx,cuda,cudnn,cublas,osrt ./build/semvecnet
 #
-# The same extracted frames are also run once without nsys to write the usual
-# smoke-test outputs: semantic_maps/, polylines/ and combined/ (semantic map
-# next to the predicted polylines).
+# SemVecNet::forward() marks each stage with an NVTX range
+# (src/semvecnet/semvecnet.cpp). tool/nsys_report.py turns those ranges into:
 #
-# CPU sampling is on by default (process-tree), so the timeline also shows the
-# C++ call stacks for the forward() stages while the stats log gives the
-# kernel/CUDA/CuDNN/cuBLAS/OS-runtime totals.
+#   OUT/report.html          open in a browser: end-to-end time per input,
+#                            per-stage breakdown, every frame, top CUDA kernels
+#   OUT/stage_timings.csv    per-frame, per-stage milliseconds
+#   OUT/frames/              semantic_maps/, polylines/, combined/ images
+#   OUT/raw/                 .nsys-rep (open with nsys-ui), full nsys stats text
+#
+# A short summary is also printed to the terminal.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 PROJECT="$REPO/CUDA-SemVecNet"
 BAG="${BAG:-$HOME/Desktop/data/bags/may_30_ring_road_test_5}"
-FRAMES="${FRAMES:-3}"
+FRAMES="${FRAMES:-10}"
 START="${START:-}"
 OUT="${OUT:-}"
 IMAGE="${SEMVECNET_IMAGE:-semvecnet:dev-ort}"
@@ -40,7 +43,8 @@ Usage: $(basename "$0") [BAG] [options]
 
   BAG                  MCAP file or directory containing one .mcap
                        (default: ~/Desktop/data/bags/may_30_ring_road_test_5)
-  --frames N           number of synchronized frames to profile (default: 3)
+  --frames N           number of synchronized frames to profile (default: 10;
+                       frame 0 is a warm-up excluded from the statistics)
   --start SECONDS      first frame, as seconds from bag start (default: middle)
   --out DIR            report + frame-image directory
                        (default: ./nsys_reports/<timestamp>-<bag>)
@@ -174,25 +178,50 @@ docker run --rm -i --gpus all --shm-size 2g \
   "$PROJECT/build/semvecnet" /hrnet.plan /semvecnet.onnx /output \
   < "$FRAMES_BIN"
 
-echo ">> Running nsys (cuda,cudnn,cublas,osrt) on $FRAMES frame(s)"
+RAW="$OUT/raw"
+mkdir -p "$RAW"
+NSYS_LOG="$RAW/nsys-profile.log"
+
+echo ">> Profiling $FRAMES frame(s) with nsys (nvtx,cuda,cudnn,cublas,osrt)"
 docker run --rm -i --gpus all --shm-size 2g \
   --user "$(id -u):$(id -g)" -e HOME=/tmp -e MPLCONFIGDIR=/tmp \
   --cap-add=SYS_PTRACE --security-opt seccomp=unconfined \
   -v "$PROJECT:$PROJECT:ro" \
   -v "$PLAN:/hrnet.plan:ro" \
   -v "$MODEL:/semvecnet.onnx:ro" \
-  -v "$OUT:/reports" \
+  -v "$RAW:/reports" \
   -w "$PROJECT" \
   "$IMAGE" \
-  nsys profile --stats=true --trace=cuda,cudnn,cublas,osrt \
+  nsys profile --stats=false --trace=nvtx,cuda,cudnn,cublas,osrt \
     --force-overwrite=true -o "/reports/$REPORT_NAME" \
     "$PROJECT/build/semvecnet" /hrnet.plan /semvecnet.onnx /tmp/semvecnet-nsys-unused --profile \
-  < "$FRAMES_BIN" 2>&1 | tee "$OUT/nsys-stats.txt"
+  < "$FRAMES_BIN" > "$NSYS_LOG" 2>&1 || {
+    echo "ERROR: nsys profile failed; last lines of $NSYS_LOG:" >&2
+    tail -n 20 "$NSYS_LOG" >&2
+    exit 1
+  }
 
-echo
-echo ">> Semantic maps:      $FRAME_OUT/semantic_maps/*.png"
-echo ">> Polylines:          $FRAME_OUT/polylines/*.json"
-echo ">> Combined views:     $FRAME_OUT/combined/*.png"
-echo ">> Nsight Systems report: $OUT/$REPORT_NAME.nsys-rep"
-echo ">> Stats log:             $OUT/nsys-stats.txt"
-echo ">> Open the timeline with: nsys-ui $OUT/$REPORT_NAME.nsys-rep"
+echo ">> Exporting nsys stats"
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$RAW:/reports" -w /reports --entrypoint bash "$IMAGE" -c "
+    set -e
+    nsys stats --force-export=true --format csv --output stats \
+      --report nvtx_pushpop_trace,cuda_gpu_kern_sum $REPORT_NAME.nsys-rep >/dev/null
+    nsys stats $REPORT_NAME.nsys-rep > nsys-stats.txt 2>&1
+  "
+
+META="$(printf '{"bag": "%s", "start": "%s", "created": "%s", "files": [["frames/", "semantic_maps/, polylines/ and combined/ outputs"], ["stage_timings.csv", "per-frame, per-stage ms"], ["raw/%s.nsys-rep", "open with nsys-ui for the full timeline"], ["raw/nsys-stats.txt", "every nsys stats report as text"]]}' \
+  "$(basename "$BAG")" "$START" "$(date '+%Y-%m-%d %H:%M')" "$REPORT_NAME")"
+
+docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
+  -v "$PROJECT/tool/nsys_report.py:/nsys_report.py:ro" \
+  -v "$OUT:/out" \
+  --entrypoint python3 "$READER_IMAGE" -I /nsys_report.py \
+    --nvtx "/out/raw/stats_nvtx_pushpop_trace.csv" \
+    --kernels "/out/raw/stats_cuda_gpu_kern_sum.csv" \
+    --out /out --meta "$META"
+
+echo ">> Report:          $OUT/report.html"
+echo ">> Stage timings:   $OUT/stage_timings.csv"
+echo ">> Frame images:    $FRAME_OUT/{semantic_maps,polylines,combined}/"
+echo ">> nsys timeline:   nsys-ui $RAW/$REPORT_NAME.nsys-rep"

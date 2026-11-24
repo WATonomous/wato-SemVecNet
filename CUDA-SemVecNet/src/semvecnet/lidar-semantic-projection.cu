@@ -128,6 +128,8 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
 
   constexpr unsigned int threads_per_block = 256;
   const std::size_t blocks = (result_count + threads_per_block - 1) / threads_per_block;
+  // TODO: kProjectionMaxDepth is 30 m here but Python's nuScenes
+  // config uses MAPPING.PCD.RANGE_MAX = 100 m (see base-config.hpp).
   projectPoints<<<blocks, threads_per_block>>>(points_d, masks_d, calibrations_d, results_d, point_count, camera_count, kProjectionMaxDepth,
                                                image_width, image_height);
   cudaDeviceSynchronize();
