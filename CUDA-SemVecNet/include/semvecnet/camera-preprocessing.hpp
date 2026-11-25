@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuda_runtime.h>
-#include <vector>
 
 namespace semvecnet::camera {
 
@@ -17,7 +16,8 @@ public:
   Preprocessor &operator=(const Preprocessor &) = delete;
 
   // Requires a valid pointer array, 1 to 8 cameras, and RGB8 images of at least 960x720.
-  std::vector<std::vector<float>> forward(const unsigned char *const *images, int count, int width, int height);
+  // Returns device memory laid out [count, 3, 720, 960], valid until the next call.
+  const float *forward(const unsigned char *const *images, int count, int width, int height);
 
 private:
   cudaStream_t stream_ = nullptr;

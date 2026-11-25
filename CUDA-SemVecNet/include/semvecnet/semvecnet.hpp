@@ -20,9 +20,6 @@
 namespace semvecnet {
 
 struct PreparedFrame {
-  // One contiguous FP32 [1, 3, 720, 960] RGB tensor per camera, in input order.
-  std::vector<std::vector<float>> hrnet_images;
-
   // x, y, z, intensity, time_lag. For projection after HRNet
   std::vector<std::array<float, 5>> lidar_points;
 };

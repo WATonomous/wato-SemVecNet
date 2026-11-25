@@ -21,11 +21,12 @@ struct LabeledPoint {
 };
 
 // Associate visible LiDAR points with HRNet mask labels, in camera order.
-// Each point has x, y, z, intensity, time_lag; each mask is row-major 720x960.
+// Each point has x, y, z, intensity, time_lag; masks_d is device memory
+// holding camera_count row-major 720x960 masks back to back.
 // A point visible in multiple cameras can produce multiple associations.
 std::vector<LabeledPoint>
 forward(const std::vector<std::array<float, 5>> &lidar_points,
-        const std::vector<std::vector<std::int64_t>> &masks,
+        const std::int64_t *masks_d, std::size_t camera_count,
         const std::vector<CameraCalibration> &calibrations, int image_width, int image_height);
 
 } // namespace semvecnet::semantic_projection

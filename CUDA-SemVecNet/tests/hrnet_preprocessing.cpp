@@ -32,17 +32,14 @@ int main() {
                                 {0},      {0x3400}};
   semvecnet::camera::Preprocessor camera_preprocessor;
   const semvecnet::lidar::Preprocessor lidar_preprocessor;
-  const auto hrnet_images = camera_preprocessor.forward(images.data(), cameras, width, height);
+  const float *images_d = camera_preprocessor.forward(images.data(), cameras, width, height);
+  std::vector<float> hrnet_images(std::size_t(cameras) * 3 * plane);
+  cudaMemcpy(hrnet_images.data(), images_d, hrnet_images.size() * sizeof(float), cudaMemcpyDeviceToHost);
   const auto lidar_points = lidar_preprocessor.forward(lidar, 2);
   const auto near = [](float a, float b) { return std::abs(a - b) < 1e-6f; };
-  if (hrnet_images.size() != cameras) {
-    std::cerr << "Incorrect camera count\n";
-    return 1;
-  }
   for (int i = 0; i < cameras; ++i) {
-    const auto &tensor = hrnet_images[i];
-    if (tensor.size() != 3 * plane ||
-        !near(tensor[0], ((i == 0 ? 84 : i * 20) / 255.0f - 0.485f) / 0.229f) ||
+    const float *tensor = hrnet_images.data() + std::size_t(i) * 3 * plane;
+    if (!near(tensor[0], ((i == 0 ? 84 : i * 20) / 255.0f - 0.485f) / 0.229f) ||
         !near(tensor[plane - 1], (i * 20 / 255.0f - 0.485f) / 0.229f) ||
         !near(tensor[plane], (64 / 255.0f - 0.456f) / 0.224f) ||
         !near(tensor[2 * plane], (1.0f - 0.406f) / 0.225f)) {

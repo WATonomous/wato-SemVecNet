@@ -1,7 +1,9 @@
 #include "semvecnet/lidar-semantic-projection.hpp"
 #include "semvecnet/base-config.hpp"
 
+#include <cuda_runtime.h>
 #include <stdexcept>
+#include <vector>
 
 int main() {
   using namespace semvecnet;
@@ -15,7 +17,11 @@ int main() {
   std::vector<std::int64_t> mask(kHrnetWidth * kHrnetHeight, 0);
   mask[0] = 8;
   mask[1] = 13;
-  const auto labels = forward({{0, 0, 1, 0, 0}}, {mask}, {calibration}, width, height);
+  std::int64_t *mask_d = nullptr;
+  cudaMalloc(&mask_d, mask.size() * sizeof(std::int64_t));
+  cudaMemcpy(mask_d, mask.data(), mask.size() * sizeof(std::int64_t), cudaMemcpyHostToDevice);
+  const auto labels = forward({{0, 0, 1, 0, 0}}, mask_d, 1, {calibration}, width, height);
+  cudaFree(mask_d);
   if (labels.size() != 1 || labels[0].class_id != 8)
     throw std::runtime_error("Expected resized-mask lookup at pixel 0, not direct mask pixel 1");
 }

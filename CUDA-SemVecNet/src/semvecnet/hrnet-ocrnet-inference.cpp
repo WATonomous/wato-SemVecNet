@@ -1,19 +1,14 @@
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/base-config.hpp"
 
-#include <algorithm>
-#include <cstring>
 #include <cuda_runtime_api.h>
+#include <nvtx3/nvToolsExt.h>
 #include <stdexcept>
 
 namespace semvecnet::hrnet {
 
 namespace {
 constexpr std::size_t pixels = kHrnetHeight * kHrnetWidth;
-constexpr std::size_t imageFloats = kHrnetChannels * pixels;
-constexpr std::size_t inputBytes = imageFloats * sizeof(float);
-constexpr std::size_t outputBytes = pixels * sizeof(std::int64_t);
-
 } // namespace
 
 Inference::Inference(nvinfer1::ICudaEngine *engine) {
@@ -40,56 +35,35 @@ Inference::Inference(nvinfer1::ICudaEngine *engine) {
   context_.reset(engine->createExecutionContext());
   if (!context_)
     throw std::runtime_error("Failed to create HRNet execution context");
-  cudaMallocHost(reinterpret_cast<void **>(&input_h_), kMaxBatch * inputBytes);
-  cudaMallocHost(reinterpret_cast<void **>(&output_h_), kMaxBatch * outputBytes);
-  cudaMalloc(&input_d_, kMaxBatch * inputBytes);
-  cudaMalloc(&output_d_, kMaxBatch * outputBytes);
+  cudaMalloc(reinterpret_cast<void **>(&output_d_), kMaxBatch * pixels * sizeof(std::int64_t));
   cudaStreamCreate(&stream_);
-  if (!context_->setTensorAddress(inputName_, input_d_) || !context_->setTensorAddress(outputName, output_d_))
-    throw std::runtime_error("Failed to bind HRNet tensor addresses");
+  if (!context_->setTensorAddress(outputName, output_d_))
+    throw std::runtime_error("Failed to bind HRNet output address");
 }
 
 Inference::~Inference() {
   if (stream_)
     cudaStreamSynchronize(stream_);
   context_.reset();
-  cudaFree(input_d_);
   cudaFree(output_d_);
-  cudaFreeHost(input_h_);
-  cudaFreeHost(output_h_);
   if (stream_)
     cudaStreamDestroy(stream_);
-  input_d_ = output_d_ = nullptr;
-  input_h_ = nullptr;
-  output_h_ = nullptr;
-  stream_ = nullptr;
 }
 
-std::vector<std::vector<std::int64_t>> Inference::forward(const std::vector<std::vector<float>> &images) {
-  for (const auto &image : images) {
-    if (image.size() != imageFloats)
-      throw std::invalid_argument("Unexpected HRNet input image size");
-  }
+const std::int64_t *Inference::forward(const float *images_d, int count) {
+  // One batch only: a second one would overwrite the first batch's masks
+  if (!images_d || count <= 0 || count > kMaxBatch)
+    throw std::invalid_argument("Expected 1 to 8 HRNet input images");
+  if (!context_->setInputShape(inputName_, nvinfer1::Dims4{count, kHrnetChannels, kHrnetHeight, kHrnetWidth}) ||
+      !context_->setTensorAddress(inputName_, const_cast<float *>(images_d)))
+    throw std::runtime_error("Failed to set HRNet input");
 
-  std::vector<std::vector<std::int64_t>> masks;
-  masks.reserve(images.size());
-  for (std::size_t base = 0; base < images.size(); base += kMaxBatch) {
-    const int count = static_cast<int>(std::min<std::size_t>(kMaxBatch, images.size() - base));
-    // Pack the cameras back to back: the engine input is [count, 3, 720, 960]
-    for (int i = 0; i < count; ++i)
-      std::memcpy(input_h_ + i * imageFloats, images[base + i].data(), inputBytes);
-
-    if (!context_->setInputShape(inputName_, nvinfer1::Dims4{count, kHrnetChannels, kHrnetHeight, kHrnetWidth}))
-      throw std::runtime_error("Failed to set HRNet batch size");
-    cudaMemcpyAsync(input_d_, input_h_, count * inputBytes, cudaMemcpyHostToDevice, stream_);
-    if (!context_->enqueueV3(stream_))
-      throw std::runtime_error("Failed to enqueue HRNet inference");
-    cudaMemcpyAsync(output_h_, output_d_, count * outputBytes, cudaMemcpyDeviceToHost, stream_);
-    cudaStreamSynchronize(stream_);
-    for (int i = 0; i < count; ++i)
-      masks.emplace_back(output_h_ + i * pixels, output_h_ + (i + 1) * pixels);
-  }
-  return masks;
+  nvtxRangePushA("HRNet::inference"); // the sync makes the range include the GPU work
+  if (!context_->enqueueV3(stream_))
+    throw std::runtime_error("Failed to enqueue HRNet inference");
+  cudaStreamSynchronize(stream_);
+  nvtxRangePop();
+  return output_d_;
 }
 
 } // namespace semvecnet::hrnet

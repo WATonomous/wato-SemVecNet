@@ -3,7 +3,6 @@
 #include <NvInfer.h>
 #include <cstdint>
 #include <memory>
-#include <vector>
 
 namespace semvecnet::hrnet {
 
@@ -19,17 +18,15 @@ public:
   Inference(const Inference &) = delete;
   Inference &operator=(const Inference &) = delete;
 
-  // Returns one row-major [720, 960] class-ID mask per camera, in input order. Larger inputs run in chunks of kMaxBatch.
-  std::vector<std::vector<std::int64_t>> forward(const std::vector<std::vector<float>> &images);
+  // images_d is device memory [count, 3, 720, 960]. Returns device memory holding one row-major
+  // [720, 960] class-ID mask per camera, in input order. It is overwritten by the next call.
+  const std::int64_t *forward(const float *images_d, int count);
 
 private:
   std::unique_ptr<nvinfer1::IExecutionContext> context_;
   const char *inputName_ = nullptr;
   cudaStream_t stream_ = nullptr;
-  float *input_h_ = nullptr;          // pinned, kMaxBatch images
-  std::int64_t *output_h_ = nullptr; // pinned, kMaxBatch masks
-  void *input_d_ = nullptr;
-  void *output_d_ = nullptr;
+  std::int64_t *output_d_ = nullptr; // kMaxBatch masks
 };
 
 } // namespace semvecnet::hrnet

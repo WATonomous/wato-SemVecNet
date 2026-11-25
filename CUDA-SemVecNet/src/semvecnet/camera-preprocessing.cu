@@ -69,7 +69,7 @@ Preprocessor::~Preprocessor() {
     cudaStreamDestroy(stream_);
 }
 
-std::vector<std::vector<float>> Preprocessor::forward(const unsigned char *const *images, int count, int width, int height) {
+const float *Preprocessor::forward(const unsigned char *const *images, int count, int width, int height) {
   if (count <= 0 || count > hrnet::kMaxBatch)
     throw std::invalid_argument("Expected 1 to 8 camera images");
   // The kernel's area averaging only handles shrinking
@@ -90,7 +90,6 @@ std::vector<std::vector<float>> Preprocessor::forward(const unsigned char *const
     rawCapacity_ = imageBytes * count;
   }
 
-  std::vector<std::vector<float>> tensors(count, std::vector<float>(kImageFloats));
   for (int i = 0; i < count; ++i)
     cudaMemcpyAsync(raw_d_ + i * imageBytes, images[i], imageBytes, cudaMemcpyHostToDevice, stream_);
 
@@ -101,11 +100,8 @@ std::vector<std::vector<float>> Preprocessor::forward(const unsigned char *const
 
   prepareImages<<<grid, block, 0, stream_>>>(raw_d_, dst_d_, width, height);
 
-  for (int i = 0; i < count; ++i)
-    cudaMemcpyAsync(tensors[i].data(), dst_d_ + i * kImageFloats, kImageFloats * sizeof(float),
-                              cudaMemcpyDeviceToHost, stream_);
   cudaStreamSynchronize(stream_);
-  return tensors;
+  return dst_d_;
 }
 
 } // namespace semvecnet::camera

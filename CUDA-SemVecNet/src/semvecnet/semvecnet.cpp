@@ -48,13 +48,13 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   // Prepare camera images and LiDAR points for inference and projection
   const lidar::Preprocessor lidar;
   PreparedFrame prepared;
-  prepared.hrnet_images = profiled("SemVecNet::camera_preprocess",
+  const float *images_d = profiled("SemVecNet::camera_preprocess",
                                    [&] { return camera_preprocessor_.forward(camera_images, num_cameras, image_width, image_height); });
   prepared.lidar_points = profiled("SemVecNet::lidar_preprocess", [&] { return lidar.forward(lidar_points, num_points); });
 
   // Run HRNet to get a per-pixel semantic class mask for each camera
-  std::vector<std::vector<int64_t>> masks =
-      profiled("SemVecNet::hrnet_inference", [&] { return hrnet_inference_.forward(prepared.hrnet_images); });
+  const std::int64_t *masks_d =
+      profiled("SemVecNet::hrnet_inference", [&] { return hrnet_inference_.forward(images_d, num_cameras); });
 
   // Associate LiDAR points with camera mask labels and update the BEV map
   // TODO: match Python full-run density. Both this code and Python's
@@ -62,7 +62,7 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   // raycast camera pixels onto the ground plane. A mid-bag run starts with an
   // empty mapper, so replay prior frames (or start at t=0) when comparing maps.
   auto labeled_points = profiled("SemVecNet::semantic_projection", [&] {
-    return semantic_projection::forward(prepared.lidar_points, masks, calibrations, image_width, image_height);
+    return semantic_projection::forward(prepared.lidar_points, masks_d, num_cameras, calibrations, image_width, image_height);
   });
   {
     const ProfileRange range("SemVecNet::bev_mapping");

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Export HRNet-OCR (Mapillary, mapillary_ocrnet.HRNet_Mscale_fast-rattlesnake.pth) to ONNX with a dynamic
+# Export single-scale (1.0) HRNet-OCR (Mapillary, mapillary_ocrnet.HRNet_Mscale_fast-rattlesnake.pth) to ONNX with a dynamic
 # batch dimension, then build a TensorRT engine that accepts 1-8 images per call (tuned for 8).
 #
 #   tool/export_hrnet_batched.sh [assets dir] [output dir]
@@ -8,15 +8,15 @@
 #             run_mcap_pipeline.sh (default ~/Desktop/data/semvecnet_assets)
 # output dir: default CUDA-SemVecNet/model (gitignored)
 #
-# Outputs: hrnet_ocrnet_mapillary_b8.onnx  input  "images" FP32 [N,3,720,960]
+# Outputs: hrnet_ocrnet_mapillary_b8_s1.onnx  input  "images" FP32 [N,3,720,960]
 #                                          output "mask"   INT64 [N,720,960] class IDs
-#          hrnet_ocrnet_mapillary_b8.plan  TensorRT engine for this GPU + the semvecnet:dev-ort TensorRT version
+#          hrnet_ocrnet_mapillary_b8_s1.plan  TensorRT engine for this GPU + the semvecnet:dev-ort TensorRT version
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ASSETS="$(realpath "${1:-$HOME/Desktop/data/semvecnet_assets}")"
 OUT="$(realpath -m "${2:-model}")"
-NAME=hrnet_ocrnet_mapillary_b8
+NAME=hrnet_ocrnet_mapillary_b8_s1
 EXPORT_IMAGE="${HRNET_EXPORT_IMAGE:-naruarjun/tensorrt-nvidia-semseg}"
 TRT_IMAGE="${HRNET_TRT_IMAGE:-semvecnet:dev-ort}"
 mkdir -p "$OUT"
@@ -30,7 +30,7 @@ if [ ! -f "$OUT/$NAME.onnx" ]; then
     -v "$ASSETS/TensorRT-tutorial:/trt" -v "$OUT:/out" -w /trt \
     "$EXPORT_IMAGE" python - \
       --dataset mapillary --cv 0 --bs_val 1 --eval folder --eval_folder ./imgs/test_imgs \
-      --n_scales 0.5,1.0 --snapshot ASSETS_PATH/seg_weights/mapillary_ocrnet.HRNet_Mscale_fast-rattlesnake.pth \
+      --n_scales 1.0 --snapshot ASSETS_PATH/seg_weights/mapillary_ocrnet.HRNet_Mscale_fast-rattlesnake.pth \
       --arch ocrnet.HRNet_Mscale --result_dir /tmp/onnx-export <<PY > "$OUT/$NAME.export.log" 2>&1 \
     || { tail -30 "$OUT/$NAME.export.log"; exit 1; }
 import runpy, sys, torch

@@ -86,21 +86,18 @@ __global__ void projectPoints(const float *points_d, const std::int64_t *masks_d
 }
 
 std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar_points,
-                                  const std::vector<std::vector<std::int64_t>> &masks, const std::vector<CameraCalibration> &calibrations,
+                                  const std::int64_t *masks_d, std::size_t camera_count, const std::vector<CameraCalibration> &calibrations,
                                   int image_width, int image_height) {
   if (image_width <= 0 || image_height <= 0)
     throw std::invalid_argument("Expected positive input image dimensions");
-  if (lidar_points.empty() || masks.empty())
+  if (lidar_points.empty() || !masks_d || camera_count == 0)
     return {};
 
-  constexpr std::size_t mask_size = kHrnetHeight * kHrnetWidth;
   const std::size_t point_count = lidar_points.size();
-  const std::size_t camera_count = masks.size();
   const std::size_t point_values = point_count * 5;
-  const std::size_t mask_values = camera_count * mask_size;
   const std::size_t result_count = camera_count * point_count;
 
-  // Flatten host data explicitly: points [point][feature], masks [camera][pixel].
+  // Flatten host data explicitly: points [point][feature].
   std::vector<float> points;
   points.reserve(point_values);
   for (const auto &point : lidar_points)
@@ -113,17 +110,13 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
   }
 
   float *points_d = nullptr;
-  std::int64_t *masks_d = nullptr;
   DeviceCalibration *calibrations_d = nullptr;
   ProjectionResult *results_d = nullptr;
   cudaMalloc(&points_d, point_values * sizeof(float));
-  cudaMalloc(&masks_d, mask_values * sizeof(std::int64_t));
   cudaMalloc(&calibrations_d, camera_count * sizeof(DeviceCalibration));
   cudaMalloc(&results_d, result_count * sizeof(ProjectionResult));
 
   cudaMemcpy(points_d, points.data(), point_values * sizeof(float), cudaMemcpyHostToDevice);
-  for (std::size_t i = 0; i < camera_count; ++i)
-    cudaMemcpy(masks_d + i * mask_size, masks[i].data(), mask_size * sizeof(std::int64_t), cudaMemcpyHostToDevice);
   cudaMemcpy(calibrations_d, camera_data.data(), camera_count * sizeof(DeviceCalibration), cudaMemcpyHostToDevice);
 
   constexpr unsigned int threads_per_block = 256;
@@ -153,7 +146,6 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
 
   cudaFree(results_d);
   cudaFree(calibrations_d);
-  cudaFree(masks_d);
   cudaFree(points_d);
 
   return labeledPoints;
