@@ -30,7 +30,7 @@ int main() {
   const nvtype::half lidar[] = {{0x3c00}, {0xc000}, {0x3800}, {0x4800},
                                 {0},      {0x4400}, {0x4000}, {0x4200},
                                 {0},      {0x3400}};
-  const semvecnet::camera::Preprocessor camera_preprocessor;
+  semvecnet::camera::Preprocessor camera_preprocessor;
   const semvecnet::lidar::Preprocessor lidar_preprocessor;
   const auto hrnet_images = camera_preprocessor.forward(images.data(), cameras, width, height);
   const auto lidar_points = lidar_preprocessor.forward(lidar, 2);

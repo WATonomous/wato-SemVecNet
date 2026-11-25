@@ -5,7 +5,6 @@
 #include <cstring>
 #include <cuda_runtime_api.h>
 #include <stdexcept>
-#include <string>
 
 namespace semvecnet::hrnet {
 
@@ -15,10 +14,6 @@ constexpr std::size_t imageFloats = kHrnetChannels * pixels;
 constexpr std::size_t inputBytes = imageFloats * sizeof(float);
 constexpr std::size_t outputBytes = pixels * sizeof(std::int64_t);
 
-void checkCuda(cudaError_t result, const char *operation) {
-  if (result != cudaSuccess)
-    throw std::runtime_error(std::string(operation) + ": " + cudaGetErrorString(result));
-}
 } // namespace
 
 Inference::Inference(nvinfer1::ICudaEngine *engine) {
@@ -42,28 +37,19 @@ Inference::Inference(nvinfer1::ICudaEngine *engine) {
     throw std::runtime_error("HRNet engine must take a dynamic batch of up to 8 images; "
                              "build it with tool/export_hrnet_batched.sh");
 
-  try {
-    context_.reset(engine->createExecutionContext());
-    if (!context_)
-      throw std::runtime_error("Failed to create HRNet execution context");
-    checkCuda(cudaMallocHost(reinterpret_cast<void **>(&input_h_), kMaxBatch * inputBytes),
-              "Allocating pinned HRNet input");
-    checkCuda(cudaMallocHost(reinterpret_cast<void **>(&output_h_), kMaxBatch * outputBytes),
-              "Allocating pinned HRNet output");
-    checkCuda(cudaMalloc(&input_d_, kMaxBatch * inputBytes), "Allocating HRNet input");
-    checkCuda(cudaMalloc(&output_d_, kMaxBatch * outputBytes), "Allocating HRNet output");
-    checkCuda(cudaStreamCreate(&stream_), "Creating HRNet stream");
-    if (!context_->setTensorAddress(inputName_, input_d_) || !context_->setTensorAddress(outputName, output_d_))
-      throw std::runtime_error("Failed to bind HRNet tensor addresses");
-  } catch (...) {
-    release();
-    throw;
-  }
+  context_.reset(engine->createExecutionContext());
+  if (!context_)
+    throw std::runtime_error("Failed to create HRNet execution context");
+  cudaMallocHost(reinterpret_cast<void **>(&input_h_), kMaxBatch * inputBytes);
+  cudaMallocHost(reinterpret_cast<void **>(&output_h_), kMaxBatch * outputBytes);
+  cudaMalloc(&input_d_, kMaxBatch * inputBytes);
+  cudaMalloc(&output_d_, kMaxBatch * outputBytes);
+  cudaStreamCreate(&stream_);
+  if (!context_->setTensorAddress(inputName_, input_d_) || !context_->setTensorAddress(outputName, output_d_))
+    throw std::runtime_error("Failed to bind HRNet tensor addresses");
 }
 
-Inference::~Inference() { release(); }
-
-void Inference::release() noexcept {
+Inference::~Inference() {
   if (stream_)
     cudaStreamSynchronize(stream_);
   context_.reset();
@@ -95,19 +81,11 @@ std::vector<std::vector<std::int64_t>> Inference::forward(const std::vector<std:
 
     if (!context_->setInputShape(inputName_, nvinfer1::Dims4{count, kHrnetChannels, kHrnetHeight, kHrnetWidth}))
       throw std::runtime_error("Failed to set HRNet batch size");
-    try {
-      checkCuda(cudaMemcpyAsync(input_d_, input_h_, count * inputBytes, cudaMemcpyHostToDevice, stream_),
-                "Copying HRNet input");
-      if (!context_->enqueueV3(stream_))
-        throw std::runtime_error("Failed to enqueue HRNet inference");
-      checkCuda(cudaMemcpyAsync(output_h_, output_d_, count * outputBytes, cudaMemcpyDeviceToHost, stream_),
-                "Copying HRNet output");
-      checkCuda(cudaStreamSynchronize(stream_), "Synchronizing HRNet stream");
-    } catch (...) {
-      // The pinned buffers must not be reused while submitted work is still running.
-      cudaStreamSynchronize(stream_);
-      throw;
-    }
+    cudaMemcpyAsync(input_d_, input_h_, count * inputBytes, cudaMemcpyHostToDevice, stream_);
+    if (!context_->enqueueV3(stream_))
+      throw std::runtime_error("Failed to enqueue HRNet inference");
+    cudaMemcpyAsync(output_h_, output_d_, count * outputBytes, cudaMemcpyDeviceToHost, stream_);
+    cudaStreamSynchronize(stream_);
     for (int i = 0; i < count; ++i)
       masks.emplace_back(output_h_ + i * pixels, output_h_ + (i + 1) * pixels);
   }

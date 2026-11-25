@@ -23,8 +23,6 @@ public:
   std::vector<std::vector<std::int64_t>> forward(const std::vector<std::vector<float>> &images);
 
 private:
-  void release() noexcept;
-
   std::unique_ptr<nvinfer1::IExecutionContext> context_;
   const char *inputName_ = nullptr;
   cudaStream_t stream_ = nullptr;

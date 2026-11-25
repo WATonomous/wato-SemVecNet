@@ -1,6 +1,5 @@
 #include "semvecnet/semvecnet.hpp"
 
-#include "semvecnet/camera-preprocessing.hpp"
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/lidar-preprocessing.hpp"
 
@@ -47,18 +46,17 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   const ProfileRange total("SemVecNet::forward");
 
   // Prepare camera images and LiDAR points for inference and projection
-  const camera::Preprocessor camera;
   const lidar::Preprocessor lidar;
   PreparedFrame prepared;
-  prepared.hrnet_images =
-      profiled("SemVecNet::camera_preprocess", [&] { return camera.forward(camera_images, num_cameras, image_width, image_height); });
+  prepared.hrnet_images = profiled("SemVecNet::camera_preprocess",
+                                   [&] { return camera_preprocessor_.forward(camera_images, num_cameras, image_width, image_height); });
   prepared.lidar_points = profiled("SemVecNet::lidar_preprocess", [&] { return lidar.forward(lidar_points, num_points); });
 
   // Run HRNet to get a per-pixel semantic class mask for each camera
   std::vector<std::vector<int64_t>> masks =
       profiled("SemVecNet::hrnet_inference", [&] { return hrnet_inference_.forward(prepared.hrnet_images); });
 
-  // Associate LiDAR points with camera mask labels and update the BEV map.
+  // Associate LiDAR points with camera mask labels and update the BEV map
   // TODO: match Python full-run density. Both this code and Python's
   // DynamicMap.project_pcd only paint labeled LiDAR points; Python does NOT
   // raycast camera pixels onto the ground plane. A mid-bag run starts with an

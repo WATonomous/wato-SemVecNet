@@ -1,15 +1,29 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <cuda_runtime.h>
 #include <vector>
 
 namespace semvecnet::camera {
 
+// Owns the GPU buffers and stream used for preprocessing, so create it once and reuse it.
+// Calls to forward must not overlap.
 class Preprocessor {
 public:
-  // Requires a valid pointer array, positive camera count and positive dimensions.
-  std::vector<std::vector<float>> forward(const unsigned char *const *images,
-                                          int count, int width,
-                                          int height) const;
+  Preprocessor();
+  ~Preprocessor();
+  Preprocessor(const Preprocessor &) = delete;
+  Preprocessor &operator=(const Preprocessor &) = delete;
+
+  // Requires a valid pointer array, 1 to 8 cameras, and RGB8 images of at least 960x720.
+  std::vector<std::vector<float>> forward(const unsigned char *const *images, int count, int width, int height);
+
+private:
+  cudaStream_t stream_ = nullptr;
+  std::uint8_t *raw_d_ = nullptr; // camera images back to back, grown when a frame needs more
+  float *dst_d_ = nullptr;        // normalized planes for hrnet::kMaxBatch cameras
+  std::size_t rawCapacity_ = 0;   // bytes allocated at raw_d_
 };
 
 } // namespace semvecnet::camera

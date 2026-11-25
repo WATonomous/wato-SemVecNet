@@ -9,6 +9,7 @@
 
 #include "common/common.hpp"
 #include "semvecnet/base-config.hpp"
+#include "semvecnet/camera-preprocessing.hpp"
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/lidar-semantic-projection.hpp"
 #include "semvecnet/polyline-postprocessing.hpp"
@@ -50,6 +51,7 @@ public:
 private:
   TensorRtEngine hrnet_engine_;
   hrnet::Inference hrnet_inference_;
+  camera::Preprocessor camera_preprocessor_;
   bev_mapping::Mapper mapper_;
   semantic_map::Renderer renderer_;
   model::Model model_;
