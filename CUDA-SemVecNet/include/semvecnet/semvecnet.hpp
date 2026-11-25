@@ -9,6 +9,7 @@
 
 #include "common/common.hpp"
 #include "semvecnet/base-config.hpp"
+#include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/lidar-semantic-projection.hpp"
 #include "semvecnet/polyline-postprocessing.hpp"
 #include "semvecnet/semantic-bev-mapping.hpp"
@@ -30,7 +31,7 @@ using Polylines = std::vector<postprocessing::Polyline>;
 // One instance owns the inference sessions and persistent mapper across frames.
 class SemVecNet {
 public:
-  explicit SemVecNet(const std::string &hrnet_plan = "model/hrnet_ocrnet_mapillary.plan",
+  explicit SemVecNet(const std::string &hrnet_plan = "model/hrnet_ocrnet_mapillary_b8.plan",
                      const std::string &semvecnet_onnx = "model/semvecnet.onnx");
 
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
@@ -48,6 +49,7 @@ public:
 
 private:
   TensorRtEngine hrnet_engine_;
+  hrnet::Inference hrnet_inference_;
   bev_mapping::Mapper mapper_;
   semantic_map::Renderer renderer_;
   model::Model model_;

@@ -26,7 +26,7 @@ template <typename F> auto profiled(const char *name, F &&stage) {
 } // namespace
 
 SemVecNet::SemVecNet(const std::string &hrnet_plan, const std::string &semvecnet_onnx)
-    : hrnet_engine_(TensorRtEngine::load(hrnet_plan)), mapper_(), model_(semvecnet_onnx) {
+    : hrnet_engine_(TensorRtEngine::load(hrnet_plan)), hrnet_inference_(hrnet_engine_.get()), mapper_(), model_(semvecnet_onnx) {
   if (!hrnet_engine_)
     throw std::runtime_error("Failed to initialize HRNet engine and context");
 }
@@ -50,13 +50,13 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   const camera::Preprocessor camera;
   const lidar::Preprocessor lidar;
   PreparedFrame prepared;
-  prepared.hrnet_images = profiled("SemVecNet::camera_preprocess",
-                                   [&] { return camera.forward(camera_images, num_cameras, image_width, image_height); });
+  prepared.hrnet_images =
+      profiled("SemVecNet::camera_preprocess", [&] { return camera.forward(camera_images, num_cameras, image_width, image_height); });
   prepared.lidar_points = profiled("SemVecNet::lidar_preprocess", [&] { return lidar.forward(lidar_points, num_points); });
 
   // Run HRNet to get a per-pixel semantic class mask for each camera
   std::vector<std::vector<int64_t>> masks =
-      profiled("SemVecNet::hrnet_inference", [&] { return hrnet::forward(*hrnet_engine_.context(), prepared.hrnet_images); });
+      profiled("SemVecNet::hrnet_inference", [&] { return hrnet_inference_.forward(prepared.hrnet_images); });
 
   // Associate LiDAR points with camera mask labels and update the BEV map.
   // TODO: match Python full-run density. Both this code and Python's

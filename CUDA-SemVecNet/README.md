@@ -103,7 +103,7 @@ a vector list can be empty. The full run reports sweeps skipped for missing
 camera synchronization or odometry rather than filling in data.
 
 The script uses Docker with NVIDIA GPU support, the existing
-`semvecnet-mcap-hrnet:latest` reader image, `model/hrnet_ocrnet_mapillary.plan`,
+`semvecnet-mcap-hrnet:latest` reader image, `model/hrnet_ocrnet_mapillary_b8.plan`,
 and `models/semvecnet.onnx` (model paths relative to `CUDA-SemVecNet/`). Use
 `--start`, `--frames`, or `--out` to change the sample or output directory;
 see `--help` for model overrides. It is configured for the sensor topics and

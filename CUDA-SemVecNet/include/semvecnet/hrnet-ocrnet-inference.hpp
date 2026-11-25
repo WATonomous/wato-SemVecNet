@@ -2,17 +2,36 @@
 
 #include <NvInfer.h>
 #include <cstdint>
+#include <memory>
 #include <vector>
-
-namespace nvinfer1 {
-class IExecutionContext;
-}
 
 namespace semvecnet::hrnet {
 
-// Runs one normalized FP32 [1, 3, 720, 960] RGB tensor at a time.
-// Returns one row-major [720, 960] class-ID mask per camera, in input order. This generates 691,200 classes
-// each describing whether each pixel in the camera image is a road, sidewalk, etc
-std::vector<std::vector<std::int64_t>> forward(nvinfer1::IExecutionContext &context, const std::vector<std::vector<float>> &images);
+// Largest batch the engine's optimization profile accepts (tool/export_hrnet_batched.sh).
+inline constexpr int kMaxBatch = 8;
+
+// Runs every camera through HRNet in one batched TensorRT call. The engine must take a dynamic
+// batch [N,3,720,960] with N up to kMaxBatch, and must outlive this object. Calls to forward must not overlap.
+class Inference {
+public:
+  explicit Inference(nvinfer1::ICudaEngine *engine);
+  ~Inference();
+  Inference(const Inference &) = delete;
+  Inference &operator=(const Inference &) = delete;
+
+  // Returns one row-major [720, 960] class-ID mask per camera, in input order. Larger inputs run in chunks of kMaxBatch.
+  std::vector<std::vector<std::int64_t>> forward(const std::vector<std::vector<float>> &images);
+
+private:
+  void release() noexcept;
+
+  std::unique_ptr<nvinfer1::IExecutionContext> context_;
+  const char *inputName_ = nullptr;
+  cudaStream_t stream_ = nullptr;
+  float *input_h_ = nullptr;          // pinned, kMaxBatch images
+  std::int64_t *output_h_ = nullptr; // pinned, kMaxBatch masks
+  void *input_d_ = nullptr;
+  void *output_d_ = nullptr;
+};
 
 } // namespace semvecnet::hrnet
