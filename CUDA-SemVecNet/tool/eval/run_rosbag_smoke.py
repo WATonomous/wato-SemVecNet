@@ -7,6 +7,7 @@ from collections import Counter
 import math
 import os
 from pathlib import Path
+import shutil
 import struct
 import subprocess
 import sys
@@ -14,7 +15,18 @@ import tempfile
 
 
 PROJECT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_BAG = Path.home() / "Desktop/data/bags/may_30_ring_road_test_5"
+BAG_NAME = "may_30_ring_road_test_5"
+DEFAULT_BAG = PROJECT / "bags" / BAG_NAME
+# Shards of the sample bag, from the folder shared at
+# https://drive.google.com/drive/folders/127Kw3o7Org474rkK1wwMDRZKiYHaR0Db
+# (May_30_ring_road_rosbags/may_30_ring_road_test_5/).
+GDRIVE_FILES = {
+    f"{BAG_NAME}_0.mcap": "1slbfBQXnxSeQcXVOW_q5bXbx8tBCYGqn",
+    f"{BAG_NAME}_1.mcap": "16y5_GcMh3EeAhM-aV44pnhb2LTyneVWJ",
+    f"{BAG_NAME}_2.mcap": "18EMoljnlXAWEDYDsNaUCcaU0UcGL6Nxm",
+    f"{BAG_NAME}_3.mcap": "1SZUeHy2nXLV40SlDGej7M0PS2h1D6BkR",
+    f"{BAG_NAME}_4.mcap": "1ghFwz5BXie8xLUNDzhsIJNnzJelPYMtW",
+}
 CAMERAS = [f"/camera_pano_{d}" for d in ("ee", "ne", "nn", "nw", "se", "ss", "sw", "ww")]
 LIDAR = "/lidar/all/points_merged"
 ODOM = "/novatel/oem7/odom"
@@ -238,13 +250,74 @@ def extract(bag, output, start, frame_count):
               f"({dict(skipped)})", file=sys.stderr, flush=True)
 
 
+def merge_shards(shards, output):
+    """Concatenate split-bag MCAP shards (in order) into a single MCAP file."""
+    from mcap.reader import make_reader
+    from mcap.writer import Writer
+
+    part = output.with_suffix(output.suffix + ".part")
+    with open(part, "wb") as stream:
+        writer = Writer(stream)
+        writer.start()
+        schema_ids, channel_ids = {}, {}
+        for i, shard in enumerate(shards, 1):
+            print(f"  merging shard {i}/{len(shards)}: {shard.name}", flush=True)
+            with open(shard, "rb") as shard_stream:
+                for schema, channel, message in make_reader(shard_stream).iter_messages():
+                    schema_key = schema and (schema.name, schema.encoding, schema.data)
+                    if schema_key not in schema_ids:
+                        schema_ids[schema_key] = (
+                            writer.register_schema(schema.name, schema.encoding, schema.data) if schema else 0)
+                    schema_id = schema_ids[schema_key]
+                    channel_key = (channel.topic, channel.message_encoding, schema_id)
+                    if channel_key not in channel_ids:
+                        channel_ids[channel_key] = writer.register_channel(
+                            channel.topic, channel.message_encoding, schema_id, channel.metadata)
+                    writer.add_message(channel_ids[channel_key], log_time=message.log_time, data=message.data,
+                                      publish_time=message.publish_time, sequence=message.sequence)
+        writer.finish()
+    part.rename(output)
+
+
+def ensure_default_bag():
+    """Download the sample rosbag's shards (skipping ones already present) and merge them."""
+    merged = DEFAULT_BAG / f"{BAG_NAME}.mcap"
+    if merged.is_file():
+        return merged
+    for package in ("gdown", "mcap"):
+        try:
+            __import__(package)
+        except ImportError:
+            print(f"Installing {package}...", flush=True)
+            subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--user", package], check=True)
+    import gdown
+
+    raw = DEFAULT_BAG / ".raw"
+    raw.mkdir(parents=True, exist_ok=True)
+    print(f"Downloading {BAG_NAME} to {DEFAULT_BAG}/ (one-time; shows a progress bar per file)", flush=True)
+    for name, file_id in GDRIVE_FILES.items():
+        dest = raw / name
+        if dest.is_file():
+            continue
+        part = dest.with_suffix(dest.suffix + ".part")
+        gdown.download(id=file_id, output=str(part), quiet=False, resume=True)
+        part.rename(dest)
+    print("Merging shards into a single MCAP...", flush=True)
+    merge_shards(sorted(raw.glob("*.mcap")), merged)
+    shutil.rmtree(raw)
+    return merged
+
+
 def run(args):
-    bag = args.bag.expanduser().resolve()
-    if bag.is_dir():
-        files = sorted(bag.glob("*.mcap"))
-        if len(files) != 1:
-            raise ValueError(f"Expected one MCAP in {bag}; pass a specific .mcap file")
-        bag = files[0].resolve()
+    if args.bag == DEFAULT_BAG:
+        bag = ensure_default_bag()
+    else:
+        bag = args.bag.expanduser().resolve()
+        if bag.is_dir():
+            files = sorted(bag.glob("*.mcap"))
+            if len(files) != 1:
+                raise ValueError(f"Expected one MCAP in {bag}; pass a specific .mcap file")
+            bag = files[0].resolve()
     plan, model = (p.expanduser().resolve() for p in (args.hrnet, args.onnx))
     for path in (bag, plan, model):
         if not path.is_file():
@@ -309,7 +382,8 @@ def main():
         return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("bag", type=Path, nargs="?", default=DEFAULT_BAG,
-                        help="MCAP file or directory containing a single MCAP (default: the May 30 test 5 bag)")
+                        help="MCAP file or directory containing a single MCAP (default: downloads the "
+                             f"{BAG_NAME} bag into {DEFAULT_BAG.relative_to(PROJECT)}/ if not already there)")
     parser.add_argument("--frames", type=int, default=2,
                         help="sample count at 0.5 s intervals, or 0 to process every synchronized sweep (default: 2)")
     parser.add_argument("--start", type=float, help="seconds from bag start (default: 0 for all, 0.5 for a sample)")
