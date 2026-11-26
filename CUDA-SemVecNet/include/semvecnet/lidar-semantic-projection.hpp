@@ -24,6 +24,15 @@ struct LabeledPoint {
 // Each point has x, y, z, intensity, time_lag; masks_d is device memory
 // holding camera_count row-major 720x960 masks back to back.
 // A point visible in multiple cameras can produce multiple associations.
+class Projector {
+public:
+  std::vector<LabeledPoint>
+  forward(const std::vector<std::array<float, 5>> &lidar_points,
+          const std::int64_t *masks_d, std::size_t camera_count,
+          const std::vector<CameraCalibration> &calibrations, int image_width, int image_height) const;
+};
+
+// Retained for callers of the original functional interface.
 std::vector<LabeledPoint>
 forward(const std::vector<std::array<float, 5>> &lidar_points,
         const std::int64_t *masks_d, std::size_t camera_count,

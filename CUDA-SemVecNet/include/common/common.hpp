@@ -10,7 +10,7 @@ public:
   TensorRtEngine &operator=(TensorRtEngine &&) = delete;
 
   // Returns an empty owner if loading or context creation fails.
-  static TensorRtEngine load(const std::string &filePath);
+  static TensorRtEngine load(const std::string &file_path);
 
   // Borrowed pointers. Keep this owner alive while using them.
   nvinfer1::ICudaEngine *get() const { return engine_.get(); }

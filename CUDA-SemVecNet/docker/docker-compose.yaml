@@ -9,7 +9,7 @@ services:
       target: dev
     working_dir: /workspaces/wato-SemVecNet/CUDA-SemVecNet
     volumes:
-      - ../..:/workspaces/wato-SemVecNet   # whole repo, so model/ and build/ persist
+      - ../..:/workspaces/wato-SemVecNet   # whole repo, so models/ and build/ persist
     stdin_open: true
     tty: true
     network_mode: host

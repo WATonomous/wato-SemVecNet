@@ -20,8 +20,12 @@ int main() {
   std::int64_t *mask_d = nullptr;
   cudaMalloc(&mask_d, mask.size() * sizeof(std::int64_t));
   cudaMemcpy(mask_d, mask.data(), mask.size() * sizeof(std::int64_t), cudaMemcpyHostToDevice);
-  const auto labels = forward({{0, 0, 1, 0, 0}}, mask_d, 1, {calibration}, width, height);
+  const auto labels = Projector{}.forward({{0, 0, 1, 0, 0}}, mask_d, 1, {calibration}, width, height);
+  const auto legacy_labels = forward({{0, 0, 1, 0, 0}}, mask_d, 1, {calibration}, width, height);
   cudaFree(mask_d);
   if (labels.size() != 1 || labels[0].class_id != 8)
     throw std::runtime_error("Expected resized-mask lookup at pixel 0, not direct mask pixel 1");
+  if (legacy_labels.size() != labels.size() || legacy_labels[0].point_index != labels[0].point_index ||
+      legacy_labels[0].camera_index != labels[0].camera_index || legacy_labels[0].class_id != labels[0].class_id)
+    throw std::runtime_error("Functional and object projection interfaces must agree");
 }

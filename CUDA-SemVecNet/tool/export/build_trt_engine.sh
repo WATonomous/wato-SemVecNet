@@ -1,12 +1,12 @@
 #!/bin/bash
 # Build a TensorRT engine (.plan) from the exported ONNX model.
 # Run inside the dev container.  Usage:
-#   tool/export/build_trt_engine.sh path/to/semvecnet.onnx [model/semvecnet.plan]
+#   tool/export/build_trt_engine.sh path/to/semvecnet.onnx [models/semvecnet.plan]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 ONNX="${1:?usage: $0 <model.onnx> [output.plan]}"
-PLAN="${2:-model/semvecnet.plan}"
+PLAN="${2:-models/semvecnet.plan}"
 TRTEXEC="${TensorRT_Bin:-/usr/src/tensorrt/bin}/trtexec"
 
 mkdir -p "$(dirname "$PLAN")"

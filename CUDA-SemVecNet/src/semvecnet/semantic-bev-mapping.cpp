@@ -77,12 +77,12 @@ void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
     }
   }
 
-  for (const PendingUpdate &pendingUpdate : grouped_updates) {
+  for (const PendingUpdate &pending_update : grouped_updates) {
     for (std::size_t c = 0; c < grid_.class_count; ++c)
-      grid_.evidence[pendingUpdate.cell_start + c] += kLogLikelihood[c][pendingUpdate.class_index] + pendingUpdate.distance_weight;
+      grid_.evidence[pending_update.cell_start + c] += kLogLikelihood[c][pending_update.class_index] + pending_update.distance_weight;
 
-    if (pendingUpdate.intensity_boost)
-      grid_.evidence[pendingUpdate.cell_start + pendingUpdate.class_index] += 2.0f;
+    if (pending_update.intensity_boost)
+      grid_.evidence[pending_update.cell_start + pending_update.class_index] += 2.0f;
   }
 }
 

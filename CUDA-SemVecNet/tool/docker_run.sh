@@ -5,7 +5,7 @@
 #
 #   tool/docker_run.sh                     # interactive shell
 #   tool/docker_run.sh tool/build.sh       # build
-#   tool/docker_run.sh build/semvecnet model/semvecnet.plan
+#   tool/docker_run.sh build/semvecnet models/semvecnet.plan
 #
 # Builds the image first if it does not exist. Rebuild manually after Dockerfile changes:
 #   docker build -f docker/Dockerfile --target dev -t semvecnet:dev-ort .

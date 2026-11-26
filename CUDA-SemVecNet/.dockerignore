@@ -1,4 +1,6 @@
 build/
-model/*.plan
-model/*.onnx
-model/*.engine
+models/*.plan
+models/*.onnx
+models/*.engine
+models/*.json
+models/*.log

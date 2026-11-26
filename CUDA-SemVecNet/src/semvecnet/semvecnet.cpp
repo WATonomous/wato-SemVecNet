@@ -1,8 +1,5 @@
 #include "semvecnet/semvecnet.hpp"
 
-#include "semvecnet/hrnet-ocrnet-inference.hpp"
-#include "semvecnet/lidar-preprocessing.hpp"
-
 #include <nvtx3/nvtx3.hpp>
 
 #include <stdexcept>
@@ -29,18 +26,20 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
 
   const nvtx3::scoped_range total{"SemVecNet::forward"};
 
-  // Prepare camera images and LiDAR points for inference and projection
-  const lidar::Preprocessor lidar;
-  PreparedFrame prepared;
+  // Prepare camera images
   const float *images_d = camera_preprocessor_.forward(camera_images, num_cameras, image_width, image_height);
-  prepared.lidar_points = lidar.forward(lidar_points, num_points);
+
+  // Prepare Lidar points
+  const auto decoded_points = lidar_preprocessor_.forward(lidar_points, num_points);
 
   // Run HRNet to get a per-pixel semantic class mask for each camera
   const std::int64_t *masks_d = hrnet_inference_.forward(images_d, num_cameras);
 
   // Associate LiDAR points with camera mask labels and update the BEV map
-  auto labeled_points = semantic_projection::forward(prepared.lidar_points, masks_d, num_cameras, calibrations, image_width, image_height);
-  mapper_.forward(prepared.lidar_points, labeled_points, lidar_to_map);
+  const auto labeled_points = projector_.forward(decoded_points, masks_d, num_cameras, calibrations, image_width, image_height);
+
+  // Update the semantic map
+  mapper_.forward(decoded_points, labeled_points, lidar_to_map);
 
   // Render the ego-centric model input from the map.
   const model::SemanticMapInput semantic_map = renderer_.forward(mapper_.grid(), ego_to_map, semantic_rgb);

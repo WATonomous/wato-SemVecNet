@@ -24,7 +24,7 @@ public:
 
 private:
   std::unique_ptr<nvinfer1::IExecutionContext> context_;
-  const char *inputName_ = nullptr;
+  const char *input_name_ = nullptr;
   cudaStream_t stream_ = nullptr;
   std::int64_t *output_d_ = nullptr; // kMaxBatch masks
 };

@@ -1,11 +1,10 @@
 build/
-# TensorRT engines / ONNX are generated artifacts; keep model/ itself via .gitkeep
-model/*.plan
-model/*.onnx
-model/*.engine
-model/*.json
-model/*.log
+# Generated model artifacts; keep models/ itself via .gitkeep
+/models/*.plan
 /models/*.onnx
+/models/*.engine
+/models/*.json
+/models/*.log
 # CUDA/TensorRT headers copied from the docker image for IntelliSense (tool/sync_headers.sh)
 .sysroot/
 .clangd

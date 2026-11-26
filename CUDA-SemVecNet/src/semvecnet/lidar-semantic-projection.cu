@@ -38,28 +38,28 @@ __global__ void projectPoints(const float *points_d, const std::int64_t *masks_d
   const std::size_t camera_index = index / point_count;
   const std::size_t point_index = index % point_count;
 
-  const float lidarX = points_d[point_index * 5 + 0];
-  const float lidarY = points_d[point_index * 5 + 1];
-  const float lidarZ = points_d[point_index * 5 + 2];
+  const float lidar_x = points_d[point_index * 5 + 0];
+  const float lidar_y = points_d[point_index * 5 + 1];
+  const float lidar_z = points_d[point_index * 5 + 2];
 
   // Matrix for converting lidar points to points on the camera
   const float *T = calibrations_d[camera_index].lidar_to_camera;
 
   // These describe the lidar point's position relative to where the camera is mounted in 3d space
-  const float cameraX = T[0] * lidarX + T[1] * lidarY + T[2] * lidarZ + T[3];
-  const float cameraY = T[4] * lidarX + T[5] * lidarY + T[6] * lidarZ + T[7];
-  const float cameraZ = T[8] * lidarX + T[9] * lidarY + T[10] * lidarZ + T[11];
+  const float camera_x = T[0] * lidar_x + T[1] * lidar_y + T[2] * lidar_z + T[3];
+  const float camera_y = T[4] * lidar_x + T[5] * lidar_y + T[6] * lidar_z + T[7];
+  const float camera_z = T[8] * lidar_x + T[9] * lidar_y + T[10] * lidar_z + T[11];
 
-  if (!isfinite(cameraX) || !isfinite(cameraY) || !isfinite(cameraZ) || cameraZ <= 0.0f || cameraZ >= max_depth)
+  if (!isfinite(camera_x) || !isfinite(camera_y) || !isfinite(camera_z) || camera_z <= 0.0f || camera_z >= max_depth)
     return;
 
   // Camera intrinsics matrix
   const float *K = calibrations_d[camera_index].intrinsics;
 
   // Turn the coordinates of where the point is in 3d to where it is on the flat 2d camera plane
-  const float image_x = K[0] * cameraX + K[1] * cameraY + K[2] * cameraZ;
-  const float image_y = K[3] * cameraX + K[4] * cameraY + K[5] * cameraZ;
-  const float image_z = K[6] * cameraX + K[7] * cameraY + K[8] * cameraZ;
+  const float image_x = K[0] * camera_x + K[1] * camera_y + K[2] * camera_z;
+  const float image_y = K[3] * camera_x + K[4] * camera_y + K[5] * camera_z;
+  const float image_z = K[6] * camera_x + K[7] * camera_y + K[8] * camera_z;
 
   if (!isfinite(image_z) || image_z == 0.0f)
     return;
@@ -87,9 +87,9 @@ __global__ void projectPoints(const float *points_d, const std::int64_t *masks_d
   results_d[index].valid = true;
 }
 
-std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar_points,
-                                  const std::int64_t *masks_d, std::size_t camera_count, const std::vector<CameraCalibration> &calibrations,
-                                  int image_width, int image_height) {
+std::vector<LabeledPoint> Projector::forward(const std::vector<std::array<float, 5>> &lidar_points,
+                                             const std::int64_t *masks_d, std::size_t camera_count,
+                                             const std::vector<CameraCalibration> &calibrations, int image_width, int image_height) const {
   const nvtx3::scoped_range range{"SemVecNet::semantic_projection"};
   if (image_width <= 0 || image_height <= 0)
     throw std::invalid_argument("Expected positive input image dimensions");
@@ -133,8 +133,8 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
   std::vector<ProjectionResult> results(result_count);
   cudaMemcpy(results.data(), results_d, result_count * sizeof(ProjectionResult), cudaMemcpyDeviceToHost);
 
-  std::vector<LabeledPoint> labeledPoints(result_count);
-  std::size_t validCount = 0;
+  std::vector<LabeledPoint> labeled_points(result_count);
+  std::size_t valid_count = 0;
 
   for (std::size_t i = 0; i < result_count; ++i) {
     if (!results[i].valid)
@@ -142,16 +142,22 @@ std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar
 
     std::size_t camera_index = i / point_count;
     std::size_t point_index = i % point_count;
-    labeledPoints[validCount] = {point_index, camera_index, results[i].class_id};
-    ++validCount;
+    labeled_points[valid_count] = {point_index, camera_index, results[i].class_id};
+    ++valid_count;
   }
-  labeledPoints.resize(validCount);
+  labeled_points.resize(valid_count);
 
   cudaFree(results_d);
   cudaFree(calibrations_d);
   cudaFree(points_d);
 
-  return labeledPoints;
+  return labeled_points;
+}
+
+std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar_points,
+                                  const std::int64_t *masks_d, std::size_t camera_count,
+                                  const std::vector<CameraCalibration> &calibrations, int image_width, int image_height) {
+  return Projector{}.forward(lidar_points, masks_d, camera_count, calibrations, image_width, image_height);
 }
 
 } // namespace semvecnet::semantic_projection

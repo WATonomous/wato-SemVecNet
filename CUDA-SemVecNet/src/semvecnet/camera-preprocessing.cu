@@ -14,9 +14,9 @@ __constant__ float kMean[3] = {0.485f, 0.456f, 0.406f};
 __constant__ float kStd[3] = {0.229f, 0.224f, 0.225f};
 constexpr std::size_t kImageFloats = std::size_t(kHrnetChannels) * kHrnetWidth * kHrnetHeight;
 
-// src: N raw camera images back to back, [N, srcH, srcW, 3] RGB8
+// src: N raw camera images back to back, [N, src_height, src_width, 3] RGB8
 // dst: the HRNet input buffer,           [N, 3, 720, 960] FP32
-__global__ void prepareImages(const uint8_t *__restrict__ src, float *__restrict__ dst, int srcW, int srcH) {
+__global__ void prepareImages(const uint8_t *__restrict__ src, float *__restrict__ dst, int src_width, int src_height) {
   std::size_t x = blockIdx.x * blockDim.x + threadIdx.x;
   std::size_t y = blockIdx.y * blockDim.y + threadIdx.y;
   const std::size_t cam = blockIdx.z;
@@ -25,18 +25,18 @@ __global__ void prepareImages(const uint8_t *__restrict__ src, float *__restrict
     return;
 
   // Scale the image to be 960x720, this is essentially what cv::resize with cv::INTER_AREA does
-  const float sx = float(srcW) / kHrnetWidth, sy = float(srcH) / kHrnetHeight;
+  const float sx = float(src_width) / kHrnetWidth, sy = float(src_height) / kHrnetHeight;
   const float fx1 = x * sx, fx2 = fx1 + sx;
   const float fy1 = y * sy, fy2 = fy1 + sy;
-  const uint8_t *img = src + size_t(cam) * srcW * srcH * 3;
+  const uint8_t *img = src + size_t(cam) * src_width * src_height * 3;
 
   // Go to the surrounding 4 or 6 pixels and get all their RGB values since we're scaling the image down
   float acc[3] = {0.f, 0.f, 0.f};
-  for (int iy = int(fy1); iy < srcH && iy < fy2; ++iy) {
+  for (int iy = int(fy1); iy < src_height && iy < fy2; ++iy) {
     const float wy = fminf(fy2, iy + 1.f) - fmaxf(fy1, float(iy)); // vertical overlap
-    for (int ix = int(fx1); ix < srcW && ix < fx2; ++ix) {
+    for (int ix = int(fx1); ix < src_width && ix < fx2; ++ix) {
       const float w = wy * (fminf(fx2, ix + 1.f) - fmaxf(fx1, float(ix)));
-      const uint8_t *p = img + (size_t(iy) * srcW + ix) * 3;
+      const uint8_t *p = img + (size_t(iy) * src_width + ix) * 3;
       acc[0] += w * p[0];
       acc[1] += w * p[1];
       acc[2] += w * p[2];
@@ -81,19 +81,19 @@ const float *Preprocessor::forward(const unsigned char *const *images, int count
     if (!images[i])
       throw std::invalid_argument("Missing RGB8 camera image");
 
-  const std::size_t imageBytes = std::size_t(width) * height * 3;
+  const std::size_t image_bytes = std::size_t(width) * height * 3;
 
   // Only allocates on the first frame, or if a later frame is bigger
-  if (imageBytes * count > rawCapacity_) {
+  if (image_bytes * count > raw_capacity_) {
     cudaFree(raw_d_);
     raw_d_ = nullptr;
-    rawCapacity_ = 0;
-    cudaMalloc(&raw_d_, imageBytes * count);
-    rawCapacity_ = imageBytes * count;
+    raw_capacity_ = 0;
+    cudaMalloc(&raw_d_, image_bytes * count);
+    raw_capacity_ = image_bytes * count;
   }
 
   for (int i = 0; i < count; ++i)
-    cudaMemcpyAsync(raw_d_ + i * imageBytes, images[i], imageBytes, cudaMemcpyHostToDevice, stream_);
+    cudaMemcpyAsync(raw_d_ + i * image_bytes, images[i], image_bytes, cudaMemcpyHostToDevice, stream_);
 
   const dim3 block(32, 8);
 

@@ -11,6 +11,7 @@
 #include "semvecnet/base-config.hpp"
 #include "semvecnet/camera-preprocessing.hpp"
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
+#include "semvecnet/lidar-preprocessing.hpp"
 #include "semvecnet/lidar-semantic-projection.hpp"
 #include "semvecnet/polyline-postprocessing.hpp"
 #include "semvecnet/semantic-bev-mapping.hpp"
@@ -19,18 +20,13 @@
 
 namespace semvecnet {
 
-struct PreparedFrame {
-  // x, y, z, intensity, time_lag. For projection after HRNet
-  std::vector<std::array<float, 5>> lidar_points;
-};
-
 using Polylines = std::vector<postprocessing::Polyline>;
 
 // One instance owns the inference sessions and persistent mapper across frames.
 class SemVecNet {
 public:
-  explicit SemVecNet(const std::string &hrnet_plan = "model/hrnet_ocrnet_mapillary_b8_s1.plan",
-                     const std::string &semvecnet_onnx = "model/semvecnet.onnx");
+  explicit SemVecNet(const std::string &hrnet_plan = "models/hrnet_ocrnet_mapillary_b8_s1.plan",
+                     const std::string &semvecnet_onnx = "models/semvecnet.onnx");
 
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
   // five FP16 values per LiDAR point. Calibrations follow camera order and
@@ -49,6 +45,8 @@ private:
   TensorRtEngine hrnet_engine_;
   hrnet::Inference hrnet_inference_;
   camera::Preprocessor camera_preprocessor_;
+  lidar::Preprocessor lidar_preprocessor_;
+  semantic_projection::Projector projector_;
   bev_mapping::Mapper mapper_;
   semantic_map::Renderer renderer_;
   model::Model model_;

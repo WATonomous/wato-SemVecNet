@@ -23,7 +23,7 @@ private:
   cudaStream_t stream_ = nullptr;
   std::uint8_t *raw_d_ = nullptr; // camera images back to back, grown when a frame needs more
   float *dst_d_ = nullptr;        // normalized planes for hrnet::kMaxBatch cameras
-  std::size_t rawCapacity_ = 0;   // bytes allocated at raw_d_
+  std::size_t raw_capacity_ = 0;   // bytes allocated at raw_d_
 };
 
 } // namespace semvecnet::camera

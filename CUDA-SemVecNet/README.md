@@ -14,8 +14,7 @@ CUDA-SemVecNet/
 │   ├── semvecnet/     <- implementation: .cpp (host code) and .cu (CUDA kernels)
 │   ├── common/        <- shared helpers (CUDA checks, tensors, timers)
 │   └── main.cpp       <- demo executable (build/semvecnet)
-├── model/             <- put semvecnet.plan here (git-ignored)
-├── models/            <- ONNX exports for ONNX Runtime inference (no TensorRT), git-ignored
+├── models/            <- generated ONNX exports and TensorRT engines (git-ignored)
 ├── tests/             <- ctest unit tests, one binary per source file
 ├── tool/
 │   ├── build.sh           configure + build (writes compile_commands.json)
@@ -51,7 +50,8 @@ Downloads the sample bag into `bags/` on first run (shows a progress bar;
 skipped if already downloaded), then runs two synchronized frames through the
 C++ pipeline using all eight cameras and the merged LiDAR. Needs Docker with
 NVIDIA GPU support, the `semvecnet-mcap-hrnet:latest` reader image,
-`model/hrnet_ocrnet_mapillary_b8_s1.plan`, and `models/semvecnet.onnx`.
+`CUDA-SemVecNet/models/hrnet_ocrnet_mapillary_b8_s1.plan`, and
+`CUDA-SemVecNet/models/semvecnet.onnx`.
 
 Results are written per frame (matching six-digit filename stems) to:
 
@@ -65,17 +65,17 @@ different MCAP file or directory).
 
 ## HRNet engine
 
-Run on the machine whose GPU will load the engine, then copy the `.plan` into `model/`:
+From `CUDA-SemVecNet/`, run on the machine whose GPU will load the engine, then copy the `.plan` into `models/`:
 
 ```
 tool/export/export_hrnet.sh --gpu 3000      # RTX 30-series; use --gpu 4090 for a 4090
-cp hrnet_build/hrnet_ocrnet_mapillary_b8_s1.plan model/
+cp hrnet_build/hrnet_ocrnet_mapillary_b8_s1.plan models/
 ```
 
 ## Engine
 
 ```
-tool/export/build_trt_engine.sh path/to/semvecnet.onnx   # -> model/semvecnet.plan
+tool/export/build_trt_engine.sh path/to/semvecnet.onnx   # -> models/semvecnet.plan
 ```
 A `.plan` only works with the TensorRT version and GPU it was built on.
 
@@ -107,14 +107,13 @@ resampling, and coordinate conversion from `tools/infer_bevfusion.py` instead.
 
 ## Exporting models from checkpoints
 
-Both models start life as a trained `.pth` checkpoint, which is exported to a
-`.onnx` graph. HRNet's `.onnx` is then built into a `.plan` TensorRT engine
-(`## HRNet engine` above), which is what the pipeline loads. SemVecNet's
-`.onnx` (in `models/`) is what the pipeline loads directly via ONNX Runtime;
-`tool/export/build_trt_engine.sh` can also turn it into a `.plan` the same way
-as HRNet's, if you want a TensorRT engine for it instead.
+Store generated artifacts for both models in `CUDA-SemVecNet/models/` (they
+are git-ignored). Trained `.pth` checkpoints are exported to ONNX; the pipeline
+loads HRNet's TensorRT `.plan` and SemVecNet's `.onnx` via ONNX Runtime.
+`tool/export/build_trt_engine.sh` can also build a SemVecNet `.plan`.
+TensorRT plans are specific to the GPU and TensorRT version used to build them.
 
-HRNet's `.onnx` in `model/` is the existing export of the trained Mapillary
+HRNet's `.onnx` in `models/` is the existing export of the trained Mapillary
 snapshot; see the [upstream export recipe](../docs/prepare_dataset.md#prepare-dataset)
 to rebuild it from a checkpoint. Do not export the ImageNet initialization
 checkpoint as a standalone model.

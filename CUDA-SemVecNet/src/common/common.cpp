@@ -15,22 +15,22 @@ class Logger : public nvinfer1::ILogger {
 
 } // namespace
 
-TensorRtEngine TensorRtEngine::load(const std::string &filePath) {
-  std::ifstream file(filePath, std::ios::binary | std::ios::ate);
+TensorRtEngine TensorRtEngine::load(const std::string &file_path) {
+  std::ifstream file(file_path, std::ios::binary | std::ios::ate);
   if (!file.good()) {
-    std::cerr << "Failed to open " << filePath << std::endl;
+    std::cerr << "Failed to open " << file_path << std::endl;
     return {};
   }
 
   const auto size = file.tellg();
   if (size <= 0) {
-    std::cerr << "Empty or unreadable TensorRT plan: " << filePath << '\n';
+    std::cerr << "Empty or unreadable TensorRT plan: " << file_path << '\n';
     return {};
   }
   std::vector<char> data(static_cast<std::size_t>(size));
   if (!file.seekg(0) ||
       !file.read(data.data(), static_cast<std::streamsize>(data.size()))) {
-    std::cerr << "Failed to read TensorRT plan: " << filePath << '\n';
+    std::cerr << "Failed to read TensorRT plan: " << file_path << '\n';
     return {};
   }
 
@@ -45,13 +45,13 @@ TensorRtEngine TensorRtEngine::load(const std::string &filePath) {
   loaded.engine_.reset(
       loaded.runtime_->deserializeCudaEngine(data.data(), data.size()));
   if (!loaded.engine_) {
-    std::cerr << "Failed to deserialize TensorRT plan: " << filePath << '\n';
+    std::cerr << "Failed to deserialize TensorRT plan: " << file_path << '\n';
     return {};
   }
 
   loaded.context_.reset(loaded.engine_->createExecutionContext());
   if (!loaded) {
-    std::cerr << "Failed to create TensorRT execution context: " << filePath
+    std::cerr << "Failed to create TensorRT execution context: " << file_path
               << '\n';
     return {};
   }
