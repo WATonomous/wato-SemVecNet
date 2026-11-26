@@ -1,5 +1,7 @@
 #include "semvecnet/semantic-bev-mapping.hpp"
 
+#include <nvtx3/nvtx3.hpp>
+
 #include <algorithm>
 #include <cmath>
 
@@ -16,6 +18,7 @@ constexpr float kLogLikelihood[4][4] = {{-0.02048131f, -5.48753365f, -4.91826495
 
 void Mapper::forward(const std::vector<std::array<float, 5>> &lidar_points,
                      const std::vector<semantic_projection::LabeledPoint> &labeled_points, const std::array<float, 16> &lidar_to_map) {
+  const nvtx3::scoped_range range{"SemVecNet::bev_mapping"};
   checkMapOrigin(lidar_to_map);
 
   // Temporary observations for this sweep; not yet used to update the map.

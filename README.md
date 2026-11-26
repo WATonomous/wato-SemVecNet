@@ -37,7 +37,6 @@ Vector maps are essential in autonomous driving for tasks like localization and 
 - [Prepare Dataset](docs/prepare_dataset.md)
 - [Train and Eval](docs/train_eval.md)
 
-
 ## Acknowledgements
 
 SemVecNet is heavily based on [MapTRv2](https://github.com/hustvl/MapTR/tree/maptrv2) which is based on [mmdetection3d](https://github.com/open-mmlab/mmdetection3d). It is also greatly inspired by the following outstanding contributions to the open-source community: [BEVFusion](https://github.com/mit-han-lab/bevfusion), [BEVFormer](https://github.com/fundamentalvision/BEVFormer), [HDMapNet](https://github.com/Tsinghua-MARS-Lab/HDMapNet), [GKT](https://github.com/hustvl/GKT), [VectorMapNet](https://github.com/Mrmoore98/VectorMapNet_code).

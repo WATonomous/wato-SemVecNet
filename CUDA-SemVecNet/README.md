@@ -81,12 +81,11 @@ A `.plan` only works with the TensorRT version and GPU it was built on.
 
 ## Testing
 
+From `CUDA-SemVecNet/`:
+
+```bash
+tool/docker_run.sh bash -c 'cmake -S . -B build -G Ninja -DBUILD_TESTING=ON && tool/build.sh && ctest --test-dir build --output-on-failure'
 ```
-tool/build.sh && ctest --test-dir build --output-on-failure
-```
-Unit tests live in `tests/`, one binary per source file, wired up via CTest in
-`CMakeLists.txt`. They only build when `BUILD_TESTING` is on and the core
-library has sources.
 
 ## C++ and CUDA responsibilities
 

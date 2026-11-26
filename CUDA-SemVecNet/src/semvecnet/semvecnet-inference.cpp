@@ -1,6 +1,7 @@
 #include "semvecnet/semvecnet-inference.hpp"
 
 #include <onnxruntime_cxx_api.h>
+#include <nvtx3/nvtx3.hpp>
 #include <stdexcept>
 
 namespace semvecnet::model {
@@ -15,6 +16,7 @@ Model::Model(const std::string &onnx_path) {
 Model::~Model() = default;
 
 DecoderOutput Model::forward(const SemanticMapInput &semantic_map) {
+  const nvtx3::scoped_range range{"SemVecNet::semvecnet_model"};
   constexpr std::size_t input_count = 1 * 3 * 300 * 150;
   constexpr std::size_t logits_count = 1 * 70 * 4;
   constexpr std::size_t points_count = 1 * 70 * 20 * 2;

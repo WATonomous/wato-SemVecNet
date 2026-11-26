@@ -3,6 +3,8 @@
 #include "semvecnet/base-config.hpp"
 #include "semvecnet/semvecnet-inference.hpp"
 
+#include <nvtx3/nvtx3.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -10,6 +12,7 @@
 namespace semvecnet::postprocessing {
 
 std::vector<Polyline> Postprocessor::forward(const model::DecoderOutput &predictions) const {
+  const nvtx3::scoped_range range{"SemVecNet::postprocess"};
   // TODO: match the Python full-map path. tools/infer_bevfusion.py runs 5x3 tiles,
   // clips each prediction to its tile core, drops vectors without semantic
   // support, stitches same-class lines across seams and de-duplicates them.

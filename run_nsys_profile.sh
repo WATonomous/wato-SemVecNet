@@ -14,8 +14,8 @@
 #
 #   nsys profile --trace=nvtx,cuda,cudnn,cublas,osrt ./build/semvecnet
 #
-# SemVecNet::forward() marks each stage with an NVTX range
-# (src/semvecnet/semvecnet.cpp). tool/eval/nsys_report.py turns those ranges into:
+# SemVecNet::forward() and the stage implementations use NVTX ranges.
+# tool/eval/nsys_report.py turns those ranges into:
 #
 #   OUT/report.html          open in a browser: end-to-end time per input,
 #                            per-stage breakdown, every frame, top CUDA kernels

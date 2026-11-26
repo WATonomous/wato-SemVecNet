@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Turn an Nsight Systems run of build/semvecnet into a readable timing report.
 
-Reads the CSVs that `nsys stats` exports for the NVTX ranges that
-SemVecNet::forward() pushes (src/semvecnet/semvecnet.cpp) and for CUDA kernels,
+Reads the CSVs that `nsys stats` exports for the NVTX ranges in
+SemVecNet::forward() and its stage implementations, and for CUDA kernels,
 then writes:
 
   report.html          per-stage breakdown, per-frame timeline, top kernels
@@ -371,13 +371,13 @@ ul {{ margin: 8px 0 0; padding-left: 18px; color: var(--text-secondary); }}
 
 <section>
   <h2>Where the time goes</h2>
-  <p class="sub">Median ms per stage of <code>SemVecNet::forward()</code>, largest first. Hover a row for mean, p95 and max.</p>
+  <p class="sub">Median host elapsed time per stage of <code>SemVecNet::forward()</code>, largest first. These NVTX ranges include CPU work and any waiting, but asynchronous GPU work may continue after a range ends. Hover a row for mean, p95 and max.</p>
   {bars}
 </section>
 
 <section>
   <h2>Every frame</h2>
-  <p class="sub">Each bar is one <code>forward()</code> call with stages in pipeline order, all on one scale. Hover a segment for its time. {warm_note}</p>
+  <p class="sub">Each bar is one <code>forward()</code> call with host-side stage durations in pipeline order, all on one scale. Hover a segment for its time. {warm_note}</p>
   <div class="legend">{legend}</div>
   {frames}
 </section>

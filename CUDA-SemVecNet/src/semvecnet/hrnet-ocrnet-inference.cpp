@@ -2,7 +2,7 @@
 #include "semvecnet/base-config.hpp"
 
 #include <cuda_runtime_api.h>
-#include <nvtx3/nvToolsExt.h>
+#include <nvtx3/nvtx3.hpp>
 #include <stdexcept>
 
 namespace semvecnet::hrnet {
@@ -51,6 +51,7 @@ Inference::~Inference() {
 }
 
 const std::int64_t *Inference::forward(const float *images_d, int count) {
+  const nvtx3::scoped_range range{"SemVecNet::hrnet_inference"};
   // One batch only: a second one would overwrite the first batch's masks
   if (!images_d || count <= 0 || count > kMaxBatch)
     throw std::invalid_argument("Expected 1 to 8 HRNet input images");
@@ -58,11 +59,9 @@ const std::int64_t *Inference::forward(const float *images_d, int count) {
       !context_->setTensorAddress(inputName_, const_cast<float *>(images_d)))
     throw std::runtime_error("Failed to set HRNet input");
 
-  nvtxRangePushA("HRNet::inference"); // the sync makes the range include the GPU work
   if (!context_->enqueueV3(stream_))
     throw std::runtime_error("Failed to enqueue HRNet inference");
   cudaStreamSynchronize(stream_);
-  nvtxRangePop();
   return output_d_;
 }
 

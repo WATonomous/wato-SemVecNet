@@ -1,12 +1,14 @@
 #include "semvecnet/lidar-preprocessing.hpp"
 
 #include <cuda_fp16.h>
+#include <nvtx3/nvtx3.hpp>
 
 #include <cstring>
 
 namespace semvecnet::lidar {
 
 std::vector<std::array<float, 5>> Preprocessor::forward(const nvtype::half *points, int count) const {
+  const nvtx3::scoped_range range{"SemVecNet::lidar_preprocess"};
   std::vector<std::array<float, 5>> decoded(count);
 
   // The ROS wrapper may pass a reinterpreted __half buffer. Copy the bits

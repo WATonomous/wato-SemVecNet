@@ -3,27 +3,11 @@
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
 #include "semvecnet/lidar-preprocessing.hpp"
 
-#include <nvtx3/nvToolsExt.h>
+#include <nvtx3/nvtx3.hpp>
 
 #include <stdexcept>
 
 namespace semvecnet {
-namespace {
-// Names a stage in the Nsight Systems timeline. run_nsys_profile.sh reads
-// ranges prefixed with "SemVecNet::" to build its per-stage timing report.
-struct ProfileRange {
-  explicit ProfileRange(const char *name) { nvtxRangePushA(name); }
-  ~ProfileRange() { nvtxRangePop(); }
-  ProfileRange(const ProfileRange &) = delete;
-  ProfileRange &operator=(const ProfileRange &) = delete;
-};
-
-template <typename F> auto profiled(const char *name, F &&stage) {
-  const ProfileRange range(name);
-  return stage();
-}
-} // namespace
-
 SemVecNet::SemVecNet(const std::string &hrnet_plan, const std::string &semvecnet_onnx)
     : hrnet_engine_(TensorRtEngine::load(hrnet_plan)), hrnet_inference_(hrnet_engine_.get()), mapper_(), model_(semvecnet_onnx) {
   if (!hrnet_engine_)
@@ -43,37 +27,29 @@ Polylines SemVecNet::forward(const unsigned char *const *camera_images, const nv
   if (calibrations.size() != static_cast<std::size_t>(num_cameras))
     throw std::invalid_argument("Expected one calibration per camera");
 
-  const ProfileRange total("SemVecNet::forward");
+  const nvtx3::scoped_range total{"SemVecNet::forward"};
 
   // Prepare camera images and LiDAR points for inference and projection
   const lidar::Preprocessor lidar;
   PreparedFrame prepared;
-  const float *images_d = profiled("SemVecNet::camera_preprocess",
-                                   [&] { return camera_preprocessor_.forward(camera_images, num_cameras, image_width, image_height); });
-  prepared.lidar_points = profiled("SemVecNet::lidar_preprocess", [&] { return lidar.forward(lidar_points, num_points); });
+  const float *images_d = camera_preprocessor_.forward(camera_images, num_cameras, image_width, image_height);
+  prepared.lidar_points = lidar.forward(lidar_points, num_points);
 
   // Run HRNet to get a per-pixel semantic class mask for each camera
-  const std::int64_t *masks_d = profiled("SemVecNet::hrnet_inference", [&] { return hrnet_inference_.forward(images_d, num_cameras); });
+  const std::int64_t *masks_d = hrnet_inference_.forward(images_d, num_cameras);
 
   // Associate LiDAR points with camera mask labels and update the BEV map
-  auto labeled_points = profiled("SemVecNet::semantic_projection", [&] {
-    return semantic_projection::forward(prepared.lidar_points, masks_d, num_cameras, calibrations, image_width, image_height);
-  });
-  {
-    const ProfileRange range("SemVecNet::bev_mapping");
-    mapper_.forward(prepared.lidar_points, labeled_points, lidar_to_map);
-  }
+  auto labeled_points = semantic_projection::forward(prepared.lidar_points, masks_d, num_cameras, calibrations, image_width, image_height);
+  mapper_.forward(prepared.lidar_points, labeled_points, lidar_to_map);
 
   // Render the ego-centric model input from the map.
-  const model::SemanticMapInput semantic_map =
-      profiled("SemVecNet::map_render", [&] { return renderer_.forward(mapper_.grid(), ego_to_map, semantic_rgb); });
+  const model::SemanticMapInput semantic_map = renderer_.forward(mapper_.grid(), ego_to_map, semantic_rgb);
 
   // Predict normalized polyline points and class logits
-  semvecnet::model::DecoderOutput predictions = profiled("SemVecNet::semvecnet_model", [&] { return model_.forward(semantic_map); });
+  semvecnet::model::DecoderOutput predictions = model_.forward(semantic_map);
 
   // Score and filter predictions, converting their ordered points to meters
-  std::vector<semvecnet::postprocessing::Polyline> polylines =
-      profiled("SemVecNet::postprocess", [&] { return postprocessor_.forward(predictions); });
+  std::vector<semvecnet::postprocessing::Polyline> polylines = postprocessor_.forward(predictions);
 
   return polylines;
 }

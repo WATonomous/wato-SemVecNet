@@ -1,4 +1,6 @@
 #include "semvecnet/lidar-semantic-projection.hpp"
+
+#include <nvtx3/nvtx3.hpp>
 #include "semvecnet/semvecnet.hpp"
 
 #include <algorithm>
@@ -88,6 +90,7 @@ __global__ void projectPoints(const float *points_d, const std::int64_t *masks_d
 std::vector<LabeledPoint> forward(const std::vector<std::array<float, 5>> &lidar_points,
                                   const std::int64_t *masks_d, std::size_t camera_count, const std::vector<CameraCalibration> &calibrations,
                                   int image_width, int image_height) {
+  const nvtx3::scoped_range range{"SemVecNet::semantic_projection"};
   if (image_width <= 0 || image_height <= 0)
     throw std::invalid_argument("Expected positive input image dimensions");
   if (lidar_points.empty() || !masks_d || camera_count == 0)

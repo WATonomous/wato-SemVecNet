@@ -1,5 +1,7 @@
 #include "semvecnet/semantic-map-renderer.hpp"
 
+#include <nvtx3/nvtx3.hpp>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -14,6 +16,7 @@ constexpr std::array<float, 3> kStd = {58.395f, 57.12f, 57.375f};
 
 model::SemanticMapInput Renderer::forward(const bev_mapping::Grid &grid, const std::array<float, 16> &ego_to_map,
                                           std::vector<std::uint8_t> *rgb) const {
+  const nvtx3::scoped_range range{"SemVecNet::map_render"};
   model::SemanticMapInput output;
   output.values.resize(3 * kHeight * kWidth);
   if (rgb)

@@ -3,6 +3,7 @@
 #include "semvecnet/base-config.hpp"
 #include "semvecnet/hrnet-ocrnet-inference.hpp"
 
+#include <nvtx3/nvtx3.hpp>
 #include <stdexcept>
 
 namespace semvecnet::camera {
@@ -70,6 +71,7 @@ Preprocessor::~Preprocessor() {
 }
 
 const float *Preprocessor::forward(const unsigned char *const *images, int count, int width, int height) {
+  const nvtx3::scoped_range range{"SemVecNet::camera_preprocess"};
   if (count <= 0 || count > hrnet::kMaxBatch)
     throw std::invalid_argument("Expected 1 to 8 camera images");
   // The kernel's area averaging only handles shrinking
