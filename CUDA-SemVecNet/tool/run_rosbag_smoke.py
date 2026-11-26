@@ -316,7 +316,7 @@ def main():
     parser.add_argument("--out", type=Path, help="new output directory (default: create one in the current directory)")
     parser.add_argument("--profile", action="store_true",
                         help="report per-stage timings without writing inference outputs")
-    parser.add_argument("--hrnet", type=Path, default=PROJECT / "model/hrnet_ocrnet_mapillary_b8.plan")
+    parser.add_argument("--hrnet", type=Path, default=PROJECT / "model/hrnet_ocrnet_mapillary_b8_s1.plan")
     parser.add_argument("--onnx", type=Path, default=PROJECT / "models/semvecnet.onnx")
     args = parser.parse_args()
     if args.profile and args.out:

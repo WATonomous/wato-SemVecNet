@@ -34,7 +34,7 @@ START="${START:-}"
 OUT="${OUT:-}"
 IMAGE="${SEMVECNET_IMAGE:-semvecnet:dev-ort}"
 READER_IMAGE="${SEMVECNET_MCAP_IMAGE:-semvecnet-mcap-hrnet:latest}"
-PLAN="${SEMVECNET_HRNET_PLAN:-$PROJECT/model/hrnet_ocrnet_mapillary_b8.plan}"
+PLAN="${SEMVECNET_HRNET_PLAN:-$PROJECT/model/hrnet_ocrnet_mapillary_b8_s1.plan}"
 MODEL="${SEMVECNET_ONNX:-$PROJECT/models/semvecnet.onnx}"
 
 usage() {

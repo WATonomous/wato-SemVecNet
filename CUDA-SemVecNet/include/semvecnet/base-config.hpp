@@ -24,7 +24,7 @@ inline constexpr std::array<float, 4> kSemvecnetPointCloudRange = {-15.0f, -30.0
 inline constexpr std::array<float, 4> kSemvecnetPostCenterLower = {-20.0f, -35.0f, -20.0f, -35.0f};
 inline constexpr std::array<float, 4> kSemvecnetPostCenterUpper = {20.0f, 35.0f, 20.0f, 35.0f};
 // Minimum confidence score for predicted polylines.
-inline constexpr float kSemvecnetConfidenceThreshold = 0.4f;
+inline constexpr float kSemvecnetConfidenceThreshold = 0.5f;
 
 // Default BEV mapping resolution and tile dimensions.
 inline constexpr float kBevResolution = 0.2f;

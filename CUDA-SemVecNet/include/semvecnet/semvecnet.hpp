@@ -29,7 +29,7 @@ using Polylines = std::vector<postprocessing::Polyline>;
 // One instance owns the inference sessions and persistent mapper across frames.
 class SemVecNet {
 public:
-  explicit SemVecNet(const std::string &hrnet_plan = "model/hrnet_ocrnet_mapillary_b8.plan",
+  explicit SemVecNet(const std::string &hrnet_plan = "model/hrnet_ocrnet_mapillary_b8_s1.plan",
                      const std::string &semvecnet_onnx = "model/semvecnet.onnx");
 
   // Same host buffers as BEVFusion: tightly packed RGB8 camera images and
