@@ -1,0 +1,14 @@
+build/
+# Generated model artifacts; keep models/ itself via .gitkeep
+/models/*.plan
+/models/*.onnx
+/models/*.engine
+/models/*.json
+/models/*.log
+# CUDA/TensorRT headers copied from the docker image for IntelliSense (tool/sync_headers.sh)
+.sysroot/
+.clangd
+# default work dir of tool/export/export_hrnet.sh
+hrnet_build/
+# rosbags downloaded by tool/eval/run_rosbag_smoke.py
+bags/

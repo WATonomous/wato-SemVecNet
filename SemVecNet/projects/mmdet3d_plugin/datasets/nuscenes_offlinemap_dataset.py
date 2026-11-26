@@ -1969,7 +1969,8 @@ class CustomNuScenesOfflineLocalSemanticMapDataset(CustomNuScenesDataset):
                         image_path_list[-3] = 'semantic/map'
                         image_path_list[-1] = image_path_list[-1][:-3] + 'png'
                         sem_path = '/'.join(image_path_list)
-                        sem_path = str(sem_path).replace("./data/nuscenes/", "/cogrob-avl-dataset/nuScenes/")
+                        # Keep local path - don't replace with external server path
+                        # sem_path = str(sem_path).replace("./data/nuscenes/", "/cogrob-avl-dataset/nuScenes/")
 
             input_dict.update(
                 dict(

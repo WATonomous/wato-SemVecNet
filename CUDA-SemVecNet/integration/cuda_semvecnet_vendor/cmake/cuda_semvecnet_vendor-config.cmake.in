@@ -1,0 +1,18 @@
+@PACKAGE_INIT@
+
+if(cuda_semvecnet_vendor_FOUND)
+  return()
+endif()
+set(cuda_semvecnet_vendor_FOUND TRUE)
+
+if(NOT TARGET cuda_semvecnet_vendor::semvecnet_core)
+  set(_semvecnet_prefix "@CMAKE_INSTALL_PREFIX@/opt/cuda_semvecnet_vendor")
+  add_library(cuda_semvecnet_vendor::semvecnet_core UNKNOWN IMPORTED)
+  set_target_properties(cuda_semvecnet_vendor::semvecnet_core PROPERTIES
+    IMPORTED_LOCATION "${_semvecnet_prefix}/lib/libsemvecnet_core.so"
+    INTERFACE_INCLUDE_DIRECTORIES "${_semvecnet_prefix}/include")
+  if(NOT EXISTS "${_semvecnet_prefix}/lib/libsemvecnet_core.so")
+    message(FATAL_ERROR "libsemvecnet_core.so not found in ${_semvecnet_prefix}/lib "
+                        "(add C++ sources under CUDA-SemVecNet/src/semvecnet first)")
+  endif()
+endif()

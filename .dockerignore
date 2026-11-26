@@ -1,0 +1,4 @@
+*
+!SemVecNet/projects
+!tools/infer_bevfusion.py
+**/__pycache__

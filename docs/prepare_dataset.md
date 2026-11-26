@@ -46,7 +46,8 @@ We use the docker image [naruarjun/tensorrt-nvidia-semseg](https://hub.docker.co
 # For AV2
 # Change paths in semantic_mapping/src/node_config/
 cd SemVecNet
-python python tools/av2_semantic_mapping.py
+# av2_semantic_mapping.py and nusc_semantic_mapping.py are on the feat/fine-tuning branch
+python tools/av2_semantic_mapping.py
 ```
 **c. Generate the custom annotation files as in MapTRv2**
 

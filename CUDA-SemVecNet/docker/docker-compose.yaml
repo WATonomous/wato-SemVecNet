@@ -1,0 +1,25 @@
+# From CUDA-SemVecNet/docker/:   docker compose run --rm dev
+# Requires the NVIDIA Container Toolkit.
+services:
+  dev:
+    image: semvecnet:dev-ort
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: dev
+    working_dir: /workspaces/wato-SemVecNet/CUDA-SemVecNet
+    volumes:
+      - ../..:/workspaces/wato-SemVecNet   # whole repo, so models/ and build/ persist
+    stdin_open: true
+    tty: true
+    network_mode: host
+    cap_add: [SYS_PTRACE]
+    security_opt: [seccomp=unconfined]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: bash

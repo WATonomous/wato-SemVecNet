@@ -1,0 +1,5 @@
+HERE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PREFIX=$(dirname $(dirname $(dirname $HERE)))
+
+ament_prepend_unique_value LD_LIBRARY_PATH "$PREFIX/opt/cuda_semvecnet_vendor/lib"
+ament_prepend_unique_value CMAKE_PREFIX_PATH "@CMAKE_INSTALL_PREFIX@/opt/cuda_semvecnet_vendor"
