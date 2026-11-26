@@ -120,7 +120,7 @@ docker build -t semvecnet-bevfusion:latest -f docker/Dockerfile .
 docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS=4 \
   --entrypoint python \
   -v "$PWD/SemVecNet/ckpts:/workspace/SemVecNet/ckpts:ro" \
-  -v "$PWD/CUDA-SemVecNet/tool:/export:ro" \
+  -v "$PWD/CUDA-SemVecNet/tool/export:/export:ro" \
   -v "$PWD/CUDA-SemVecNet/models:/artifacts" \
   semvecnet-bevfusion:latest /export/export_semvecnet_onnx.py --combined --output /artifacts
 ```

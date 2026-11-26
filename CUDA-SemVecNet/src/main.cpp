@@ -15,7 +15,7 @@
 namespace {
 namespace fs = std::filesystem;
 
-// Read the little-endian frame stream written by tool/run_rosbag_smoke.py.
+// Read the little-endian frame stream written by tool/eval/run_rosbag_smoke.py.
 template <typename T> void read(std::istream &in, T *data, std::size_t count = 1) {
   if (!in.read(reinterpret_cast<char *>(data), count * sizeof(T)))
     throw std::runtime_error("Truncated sensor frame");
@@ -176,7 +176,7 @@ int main(int argc, char **argv) {
   const bool profile = argc == 5 && std::string(argv[4]) == "--profile";
   if ((argc != 4 && !profile) || (argc == 5 && !profile)) {
     std::cerr << "Usage: semvecnet HRNET.plan SEMVECNET.onnx OUTPUT_DIR [--profile] < frames.bin\n"
-              << "Use tool/run_rosbag_smoke.py to read the ROS bag and run this demo.\n";
+              << "Use tool/eval/run_rosbag_smoke.py to read the ROS bag and run this demo.\n";
     return 2;
   }
   try {

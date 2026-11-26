@@ -6,7 +6,7 @@
 
 namespace semvecnet::hrnet {
 
-// Largest batch the engine's optimization profile accepts (tool/export_hrnet_batched.sh).
+// Largest batch the engine's optimization profile accepts (tool/export/export_hrnet.sh).
 inline constexpr int kMaxBatch = 8;
 
 // Runs every camera through HRNet in one batched TensorRT call. The engine must take a dynamic

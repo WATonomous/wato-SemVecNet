@@ -24,7 +24,7 @@ struct Polyline {
 
 class Postprocessor {
 public:
-  // NuScenes settings used by tool/export_semvecnet_onnx.py.
+  // NuScenes settings used by tool/export/export_semvecnet_onnx.py.
   std::vector<Polyline> forward(const semvecnet::model::DecoderOutput &predictions) const;
 
 private:

@@ -15,12 +15,14 @@ CUDA-SemVecNet/
 ├── src/
 │   ├── semvecnet/     <- implementation: .cpp (host code) and .cu (CUDA kernels)
 │   ├── common/        <- shared helpers (CUDA checks, tensors, timers)
-│   ├── plugins/       <- optional TensorRT plugins -> libsemvecnet_plugins.so
 │   └── main.cpp       <- demo executable (build/semvecnet)
 ├── model/             <- put semvecnet.plan here (git-ignored)
 ├── tool/
-│   ├── build.sh               configure + build (writes compile_commands.json)
-│   └── build_trt_engine.sh    ONNX -> .plan via trtexec
+│   ├── build.sh           configure + build (writes compile_commands.json)
+│   ├── docker_run.sh      run a command in the dev container
+│   ├── sync_headers.sh    headers for host IntelliSense
+│   ├── export/            HRNet and SemVecNet model export, TensorRT engines
+│   └── eval/              rosbag smoke test, output comparison, profiling report
 └── docker/            Dockerfile (dev, build stages) + docker-compose.yaml
 ```
 
@@ -34,8 +36,10 @@ with BEVFusion when changing the shared type definitions.
 
 Use `.cpp` for normal host code and `.cu` only for files with CUDA kernels (`__global__`, `<<<>>>`).
 Both compile into the same `libsemvecnet_core.so`, so a `.cpp` calls a kernel through a plain C++
-function declared in a header and defined in the `.cu` file (see `hello.hpp` / `hello.cu`).
-Nothing is compiled until you add sources; until then `semvecnet_core` is an empty INTERFACE target.
+function declared in a header and defined in the `.cu` file.
+
+See [ONNX inference and pipeline notes](docs/onnx_inference.md) for the ONNX files in `models/`:
+inputs, outputs and export steps.
 
 ## Develop (VS Code)
 
@@ -72,7 +76,7 @@ GPU architecture defaults to `sm_86` (RTX 30xx) in the image; use
 From the repository root:
 
 ```bash
-CUDA-SemVecNet/tool/run_rosbag_smoke.py
+CUDA-SemVecNet/tool/eval/run_rosbag_smoke.py
 ```
 
 This reads two synchronized frames from
@@ -81,7 +85,7 @@ all eight cameras and the merged LiDAR. To process every synchronized LiDAR
 sweep from the start of the recording:
 
 ```bash
-CUDA-SemVecNet/tool/run_rosbag_smoke.py --frames 0 --out /path/to/new/results
+CUDA-SemVecNet/tool/eval/run_rosbag_smoke.py --frames 0 --out /path/to/new/results
 ```
 
 Each frame has the same six-digit filename stem in three directories:
@@ -109,10 +113,19 @@ and `models/semvecnet.onnx` (model paths relative to `CUDA-SemVecNet/`). Use
 see `--help` for model overrides. It is configured for the sensor topics and
 calibration of this recording, not a generic ROS bag player.
 
+## HRNet engine
+
+Run on the machine whose GPU will load the engine, then copy the `.plan` into `model/`:
+
+```
+tool/export/export_hrnet.sh --gpu 3000      # RTX 30-series; use --gpu 4090 for a 4090
+cp hrnet_build/hrnet_ocrnet_mapillary_b8_s1.plan model/
+```
+
 ## Engine
 
 ```
-tool/build_trt_engine.sh path/to/semvecnet.onnx   # -> model/semvecnet.plan
+tool/export/build_trt_engine.sh path/to/semvecnet.onnx   # -> model/semvecnet.plan
 ```
 A `.plan` only works with the TensorRT version and GPU it was built on.
 

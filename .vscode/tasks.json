@@ -37,7 +37,7 @@
     {
       "label": "semvecnet: build TensorRT engine (docker)",
       "type": "shell",
-      "command": "tool/docker_run.sh tool/build_trt_engine.sh ${input:onnxPath}",
+      "command": "tool/docker_run.sh tool/export/build_trt_engine.sh ${input:onnxPath}",
       "options": { "cwd": "${workspaceFolder}/CUDA-SemVecNet" },
       "problemMatcher": []
     }

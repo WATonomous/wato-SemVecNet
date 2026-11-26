@@ -106,14 +106,6 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
   list(APPEND _install_targets semvecnet)
 endif()
 
-# ----------------------------- test_plan_loader (test executable) ----------
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/test_plan_loader.cpp")
-  add_executable(test_plan_loader src/test_plan_loader.cpp)
-  target_link_libraries(test_plan_loader PRIVATE CUDA::cudart TensorRT::TensorRT)
-  # Optional: add to install targets if you want it installed
-  # list(APPEND _install_targets test_plan_loader)
-endif()
-
 include(CTest)
 if(BUILD_TESTING AND SEMVECNET_CORE_SOURCES)
   add_executable(test_hrnet_preprocessing tests/hrnet_preprocessing.cpp)

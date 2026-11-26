@@ -15,7 +15,7 @@
 #   nsys profile --trace=nvtx,cuda,cudnn,cublas,osrt ./build/semvecnet
 #
 # SemVecNet::forward() marks each stage with an NVTX range
-# (src/semvecnet/semvecnet.cpp). tool/nsys_report.py turns those ranges into:
+# (src/semvecnet/semvecnet.cpp). tool/eval/nsys_report.py turns those ranges into:
 #
 #   OUT/report.html          open in a browser: end-to-end time per input,
 #                            per-stage breakdown, every frame, top CUDA kernels
@@ -151,7 +151,7 @@ trap 'rm -f "$FRAMES_BIN"' EXIT
 echo ">> Extracting $FRAMES frame(s) from $START s"
 docker run --rm --network none --log-driver none \
   --user "$(id -u):$(id -g)" -e HOME=/tmp \
-  -v "$PROJECT/tool/run_rosbag_smoke.py:/extract.py:ro" \
+  -v "$PROJECT/tool/eval/run_rosbag_smoke.py:/extract.py:ro" \
   -v "$BAG:/bag.mcap:ro" \
   --entrypoint python3 "$READER_IMAGE" \
   /extract.py --extract /bag.mcap "$START" "$FRAMES" > "$FRAMES_BIN"
@@ -214,7 +214,7 @@ META="$(printf '{"bag": "%s", "start": "%s", "created": "%s", "files": [["frames
   "$(basename "$BAG")" "$START" "$(date '+%Y-%m-%d %H:%M')" "$REPORT_NAME")"
 
 docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp \
-  -v "$PROJECT/tool/nsys_report.py:/nsys_report.py:ro" \
+  -v "$PROJECT/tool/eval/nsys_report.py:/nsys_report.py:ro" \
   -v "$OUT:/out" \
   --entrypoint python3 "$READER_IMAGE" -I /nsys_report.py \
     --nvtx "/out/raw/stats_nvtx_pushpop_trace.csv" \

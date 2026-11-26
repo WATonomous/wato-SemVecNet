@@ -1,16 +1,39 @@
 #!/bin/bash
 # Self-contained: download the HRNet-OCR Mapillary weights, export ONNX (dynamic batch, 1-8 cameras) and build the
-# TensorRT engine on this machine's RTX 4090. Copy this one file to the car; the repo is not needed.
+# TensorRT engine on this machine's GPU. An engine only runs on the GPU type it was built on, so run this on the
+# target machine. Copy this one file there; the repo is not needed.
 #
-#   bash build_hrnet_4090.sh [work dir]                  # default ./hrnet_build
-#   bash build_hrnet_4090.sh [work dir] --download-only
+#   bash export_hrnet.sh --gpu 4090 [work dir]           # RTX 4090 (compute capability 8.9)
+#   bash export_hrnet.sh --gpu 3000 [work dir]           # RTX 30-series (compute capability 8.6)
+#   bash export_hrnet.sh --download-only [work dir]      # no GPU needed
+#
+# work dir defaults to ./hrnet_build.
 #
 # Needs: git, nvidia-smi, Docker with GPU access, internet, ~50 GB free disk (the export image alone is ~31 GB).
 # Output: <work dir>/hrnet_ocrnet_mapillary_b8_s1.plan
-# Reruns skip finished downloads and exports. The export step matches tool/export_hrnet_batched.sh.
+# Reruns skip finished downloads and exports.
 set -euo pipefail
 
-WORK="$(realpath -m "${1:-hrnet_build}")"
+die() { echo "ERROR: $*" >&2; exit 1; }
+usage="usage: $0 (--gpu 4090|3000 | --download-only) [work dir]"
+
+GPU="" DOWNLOAD_ONLY="" WORK=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --gpu) GPU="${2:-}"; [ -n "$GPU" ] || die "$usage"; shift ;;
+    --download-only) DOWNLOAD_ONLY=1 ;;
+    -*) die "$usage" ;;
+    *) [ -z "$WORK" ] || die "$usage"; WORK="$1" ;;
+  esac
+  shift
+done
+case "$GPU" in
+  4090) WANT_CAP=8.9 ;;
+  3000) WANT_CAP=8.6 ;;
+  "") [ -n "$DOWNLOAD_ONLY" ] || die "$usage" ;;
+  *) die "$usage" ;;
+esac
+WORK="$(realpath -m "${WORK:-hrnet_build}")"
 NAME=hrnet_ocrnet_mapillary_b8_s1
 ASSETS="$WORK/assets"
 OUT="$WORK"
@@ -20,12 +43,11 @@ TRT_VERSION=11.4.0.106-1+cuda13.4   # must match the TensorRT that loads the .pl
 TUTORIAL_COMMIT=dc274b3281026fef3a1cb395df70d552df784dfd
 USER_FLAGS=(--user "$(id -u):$(id -g)" -e HOME=/tmp)
 
-die() { echo "ERROR: $*" >&2; exit 1; }
 for tool in git docker sha256sum realpath; do command -v "$tool" >/dev/null || die "$tool is not installed"; done
 docker info >/dev/null 2>&1 || die "cannot reach the Docker daemon"
-if [ "${2:-}" != "--download-only" ]; then
+if [ -z "$DOWNLOAD_ONLY" ]; then
   CAP="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader -i 0)" || die "nvidia-smi failed"
-  [ "$CAP" = "8.9" ] || die "GPU 0 has compute capability $CAP, not 8.9 (RTX 4090)"
+  [ "$CAP" = "$WANT_CAP" ] || die "GPU 0 has compute capability $CAP, but --gpu $GPU needs $WANT_CAP"
 fi
 mkdir -p "$ASSETS/seg_weights" "$ASSETS/data/Mapillary/data" "$OUT"
 
@@ -53,7 +75,7 @@ if [ ! -d "$WORK/TensorRT-tutorial/.git" ]; then
   git clone https://github.com/naruarjun/TensorRT-tutorial.git "$WORK/TensorRT-tutorial"
 fi
 git -C "$WORK/TensorRT-tutorial" checkout -q "$TUTORIAL_COMMIT"
-[ "${2:-}" != "--download-only" ] || { echo "Downloaded to $WORK"; exit 0; }
+[ -z "$DOWNLOAD_ONLY" ] || { echo "Downloaded to $WORK"; exit 0; }
 
 echo ">> [2/4] Export ONNX"
 if [ -f "$OUT/$NAME.onnx" ]; then

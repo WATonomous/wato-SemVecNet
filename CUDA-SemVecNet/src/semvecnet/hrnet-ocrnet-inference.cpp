@@ -30,7 +30,7 @@ Inference::Inference(nvinfer1::ICudaEngine *engine) {
   const nvinfer1::Dims maxShape = engine->getProfileShape(inputName_, 0, nvinfer1::OptProfileSelector::kMAX);
   if (engine->getTensorShape(inputName_).d[0] != -1 || maxShape.nbDims != 4 || maxShape.d[0] < kMaxBatch)
     throw std::runtime_error("HRNet engine must take a dynamic batch of up to 8 images; "
-                             "build it with tool/export_hrnet_batched.sh");
+                             "build it with tool/export/export_hrnet.sh");
 
   context_.reset(engine->createExecutionContext());
   if (!context_)

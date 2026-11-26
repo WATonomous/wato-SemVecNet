@@ -13,7 +13,7 @@ import sys
 import tempfile
 
 
-PROJECT = Path(__file__).resolve().parent.parent
+PROJECT = Path(__file__).resolve().parent.parent.parent
 DEFAULT_BAG = Path.home() / "Desktop/data/bags/may_30_ring_road_test_5"
 CAMERAS = [f"/camera_pano_{d}" for d in ("ee", "ne", "nn", "nw", "se", "ss", "sw", "ww")]
 LIDAR = "/lidar/all/points_merged"
