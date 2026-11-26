@@ -1,10 +1,8 @@
 # CUDA-SemVecNet
 
-C++/CUDA/TensorRT inference for the SemVecNet model: **ResNet-50 + FPN encoder and MapTRv2 decoder**,
-taking a BEV semantic map and producing vector map polylines.
+C++/CUDA/TensorRT inference for the SemVecNet model. It generates a BEV semantic map and produces vector map polylines.
 
-Same approach as `wato-cuda-bevfusion`: load a prebuilt TensorRT `.plan`, run the whole network
-in one forward call, then post-process on the GPU/CPU.
+## File Structure
 
 ```
 CUDA-SemVecNet/
@@ -17,6 +15,8 @@ CUDA-SemVecNet/
 │   ├── common/        <- shared helpers (CUDA checks, tensors, timers)
 │   └── main.cpp       <- demo executable (build/semvecnet)
 ├── model/             <- put semvecnet.plan here (git-ignored)
+├── models/            <- ONNX exports for ONNX Runtime inference (no TensorRT), git-ignored
+├── tests/             <- ctest unit tests, one binary per source file
 ├── tool/
 │   ├── build.sh           configure + build (writes compile_commands.json)
 │   ├── docker_run.sh      run a command in the dev container
@@ -29,47 +29,15 @@ CUDA-SemVecNet/
 Headers go in `include/` and are included as `#include "semvecnet/foo.hpp"`. `include/` is what
 gets installed for the monorepo; `src/` is also on the include path (privately) for internal headers.
 
-`include/common/dtype.hpp` is copied unchanged from `wato-cuda-bevfusion`
-(`CUDA-BEVFusion/src/common/dtype.hpp` at `f5c954d4f06f09e9caf4eafb8f19884661508fc7`).
-It provides the shared `nvtype` types without linking BEVFusion. Keep it in sync
-with BEVFusion when changing the shared type definitions.
-
-Use `.cpp` for normal host code and `.cu` only for files with CUDA kernels (`__global__`, `<<<>>>`).
-Both compile into the same `libsemvecnet_core.so`, so a `.cpp` calls a kernel through a plain C++
-function declared in a header and defined in the `.cu` file.
-
-See [ONNX inference and pipeline notes](docs/onnx_inference.md) for the ONNX files in `models/`:
-inputs, outputs and export steps.
-
 ## Develop (VS Code)
 
-Edit on the host; build and run in a throwaway GPU container (no dev container needed).
-Needs Docker + NVIDIA Container Toolkit.
+1. Open the repository in VS Code and **allow automatic tasks** when prompted.
+2. Build: **Ctrl+Shift+B**
+3. Run: **F5** (outputs to Terminal panel)
+4. Debug: Run and Debug panel > "semvecnet (debugger)"
 
-1. Open the repository folder in VS Code on the host and allow automatic tasks when prompted.
-   The header-sync task builds `semvecnet:dev-ort` if needed (CUDA 13.4, TensorRT 11.4,
-   OpenCV and the ONNX Runtime GPU C++ SDK).
-2. The task copies the development headers into `.sysroot/` (git-ignored) so host
-   IntelliSense and clangd can find them. No Dev Container is needed. If automatic
-   tasks are disabled, run `semvecnet: sync IntelliSense headers` once instead.
-3. Build: `tool/build.sh` (or Ctrl+Shift+B). On the host it re-runs itself inside the container.
-4. Run the [rosbag smoke test](#rosbag-smoke-test), or use `tool/docker_run.sh` for a shell.
-5. In VS Code, build and run are separate: **Ctrl+Shift+B** builds. Run with the task
-   "semvecnet: run (docker)" (Terminal > Run Task, or Run Test Task); it prints in the Terminal panel
-   and ends when the program ends. **F5** is bound to this task for C++/CUDA files in the user
-   keybindings (`~/.config/Code/User/keybindings.json`, see below), so F5 prints in the Terminal.
-   For breakpoints use the green play button in Run and Debug ("semvecnet (debugger)"). Neither rebuilds.
-   Program arguments: edit `command` in `.vscode/tasks.json` (run) or `args` in `launch.json` (F5).
-   `SEMVECNET_QUIET=1` on `tool/docker_run.sh` hides NVIDIA's startup banner.
-
-   The F5 binding (user-level, not in the repo) is:
-   `{ "key": "f5", "command": "workbench.action.tasks.runTask", "args": "semvecnet: run (docker)", "when": "!inDebugMode && resourceExtname =~ /\\.(cpp|cu|hpp|cuh|h|cc)$/" }`
-
-The repo is mounted at the same absolute path inside the container, so compiler errors are clickable.
-`.devcontainer/` still works if you ever want a full in-container VS Code.
-
-GPU architecture defaults to `sm_86` (RTX 30xx) in the image; use
-`--build-arg CUDASM=89` or `CUDASM=89 tool/build.sh` for other GPUs.
+Builds and runs in a GPU container (Docker + NVIDIA Container Toolkit required).
+Edit on the host; headers are synced automatically for IntelliSense.
 
 ## Rosbag smoke test
 
@@ -79,39 +47,21 @@ From the repository root:
 CUDA-SemVecNet/tool/eval/run_rosbag_smoke.py
 ```
 
-This reads two synchronized frames from
-`~/Desktop/data/bags/may_30_ring_road_test_5/` and runs the C++ pipeline with
-all eight cameras and the merged LiDAR. To process every synchronized LiDAR
-sweep from the start of the recording:
+Downloads the sample bag into `bags/` on first run (shows a progress bar;
+skipped if already downloaded), then runs two synchronized frames through the
+C++ pipeline using all eight cameras and the merged LiDAR. Needs Docker with
+NVIDIA GPU support, the `semvecnet-mcap-hrnet:latest` reader image,
+`model/hrnet_ocrnet_mapillary_b8_s1.plan`, and `models/semvecnet.onnx`.
 
-```bash
-CUDA-SemVecNet/tool/eval/run_rosbag_smoke.py --frames 0 --out /path/to/new/results
-```
+Results are written per frame (matching six-digit filename stems) to:
 
-Each frame has the same six-digit filename stem in three directories:
+- `polylines/`: JSON with timestamp, pose, and scored vectors.
+- `semantic_maps/`: the 150 × 300 RGB semantic map.
+- `combined/`: the semantic map next to the predicted polylines.
 
-- `polylines/`: JSON with timestamp, local odometry pose, and scored vectors
-  in rear-axle coordinates (meters, x forward and y left), like the Python
-  `vectors/` files.
-- `semantic_maps/`: the 150 × 300 RGB semantic map before normalization.
-- `combined/`: the semantic map next to the predicted polylines on the same
-  extent, using the Python comparison view's class colors.
-
-Both the C++ mapper and Python's `DynamicMap.project_pcd` paint labeled LiDAR
-returns; Python does not raycast camera pixels onto the road plane. Python maps
-look denser mainly because a full run accumulates many sweeps, while a mid-bag
-run starts with an empty mapper. Python's nuScenes config also labels points up
-to 100 m camera-Z depth, versus 30 m in this port (see the TODO in
-`include/semvecnet/base-config.hpp`). Predictions use the C++ score filter, so
-a vector list can be empty. The full run reports sweeps skipped for missing
-camera synchronization or odometry rather than filling in data.
-
-The script uses Docker with NVIDIA GPU support, the existing
-`semvecnet-mcap-hrnet:latest` reader image, `model/hrnet_ocrnet_mapillary_b8_s1.plan`,
-and `models/semvecnet.onnx` (model paths relative to `CUDA-SemVecNet/`). Use
-`--start`, `--frames`, or `--out` to change the sample or output directory;
-see `--help` for model overrides. It is configured for the sensor topics and
-calibration of this recording, not a generic ROS bag player.
+Use `--frames 0` to process the whole bag, `--out` to pick an output
+directory, or `--help` for all options (including pointing `bag` at a
+different MCAP file or directory).
 
 ## HRNet engine
 
@@ -129,14 +79,102 @@ tool/export/build_trt_engine.sh path/to/semvecnet.onnx   # -> model/semvecnet.pl
 ```
 A `.plan` only works with the TensorRT version and GPU it was built on.
 
-## Monorepo
+## Testing
 
-See `../integration/README.md` for linking into `wato_monorepo`.
+```
+tool/build.sh && ctest --test-dir build --output-on-failure
+```
+Unit tests live in `tests/`, one binary per source file, wired up via CTest in
+`CMakeLists.txt`. They only build when `BUILD_TESTING` is on and the core
+library has sources.
 
-`SemVecNet::forward` takes both `lidar_to_map` and `ego_to_map` row-major 4x4
-poses. The mapper uses the LiDAR pose to place points; the renderer uses the
-ego pose to orient and center the model input. They may differ when the LiDAR
-is offset from the vehicle's ego frame.
+## C++ and CUDA responsibilities
+
+Start with CPU code for the non-model stages. Profile the full pipeline before
+moving them to CUDA.
+
+| Stage | First implementation | When CUDA helps |
+| --- | --- | --- |
+| Load sensor data, synchronize timestamps, load calibration and poses | C++ or existing sensor stack | No custom kernel. Use pinned host buffers and async copies if transfers dominate. |
+| Resize and normalize camera images | OpenCV or existing GPU preprocessing | Fuse resize, normalize, and HWC-to-NCHW conversion if CPU cost or transfers matter. |
+| Project LiDAR into cameras and sample labels | Port `DynamicMap.project_pcd` | Parallelize by point and camera. Match coordinate transforms, bounds, and mask sampling. |
+| Rasterize and update BEV | Port `DynamicMap.update_map` | Parallelize grid updates. Test duplicate-cell behavior before replacing NumPy updates with GPU atomics or reductions. |
+| Render and normalize ego BEV | Port `render_local_map` and `render_bev_map` | Fuse class selection, palette lookup, crop/warp, and normalization if profiling favors it. Match whether the reference enables filtering. |
+| Decode polylines | Port `MapTRNMSFreeCoder` to C++ | No custom kernel needed initially: 280 class scores, top 50, score/range filtering, and conversion to metres. Classes are divider, pedestrian crossing, boundary, and centerline in that order. |
+| Group lanelets | New CPU geometry code | No custom kernel needed initially. Pair oriented left and right boundaries, use centerlines where available, and validate geometry before constructing topology. |
+
+If using BEVFusion instead of OCRNet and `DynamicMap`, port the class remap,
+resampling, and coordinate conversion from `tools/infer_bevfusion.py` instead.
+
+## Exporting models from checkpoints
+
+Both models start life as a trained `.pth` checkpoint, which is exported to a
+`.onnx` graph. HRNet's `.onnx` is then built into a `.plan` TensorRT engine
+(`## HRNet engine` above), which is what the pipeline loads. SemVecNet's
+`.onnx` (in `models/`) is what the pipeline loads directly via ONNX Runtime;
+`tool/export/build_trt_engine.sh` can also turn it into a `.plan` the same way
+as HRNet's, if you want a TensorRT engine for it instead.
+
+HRNet's `.onnx` in `model/` is the existing export of the trained Mapillary
+snapshot; see the [upstream export recipe](../docs/prepare_dataset.md#prepare-dataset)
+to rebuild it from a checkpoint. Do not export the ImageNet initialization
+checkpoint as a standalone model.
+
+For a fine-tuned SemVecNet encoder/decoder checkpoint, export it to `.onnx`:
+
+```bash
+docker build -t semvecnet-bevfusion:latest -f docker/Dockerfile .
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e OMP_NUM_THREADS=4 \
+  --entrypoint python \
+  -v "$PWD/SemVecNet/ckpts:/workspace/SemVecNet/ckpts:ro" \
+  -v "$PWD/CUDA-SemVecNet/tool/export:/export:ro" \
+  -v "$PWD/CUDA-SemVecNet/models:/artifacts" \
+  semvecnet-bevfusion:latest /export/export_semvecnet_onnx.py --combined --output /artifacts
+```
+
+Omit `--combined` to export the encoder and decoder as two separate graphs
+instead (useful if you need the intermediate features). The exporter loads
+the checkpoint strictly with the nuScenes model configuration, replaces only
+the decoder's bilinear sampler during export, and compares the replacement
+with the PyTorch reference before writing the decoder graph. The trained
+attention projections stay unchanged.
+
+## Monorepo integration
+
+`integration/cuda_semvecnet_vendor` is an `ament_cmake` vendor package that builds
+`CUDA-SemVecNet/` as an `ExternalProject` and installs it, exposing the imported
+target `cuda_semvecnet_vendor::semvecnet_core`. A ROS wrapper package depends on
+it with:
+
+```cmake
+find_package(cuda_semvecnet_vendor REQUIRED)
+target_link_libraries(<target> PUBLIC cuda_semvecnet_vendor::semvecnet_core)
+```
+
+The `.plan` engine is not baked into the image; it is mounted and its path is
+passed in as a ROS parameter, since engines are tied to the TensorRT version
+and GPU they were built on.
+
+`SemVecNet::forward` (`include/semvecnet/semvecnet.hpp`) is the entry point the
+wrapper package calls. It takes:
+
+- tightly packed RGB8 camera images and a flat array of five FP16 values per
+  LiDAR point (x, y, z, intensity, time_lag) — the same host buffers BEVFusion
+  uses
+- per-camera calibrations (input-image intrinsics, camera order) and the
+  shared image width/height
+- both `lidar_to_map` and `ego_to_map` row-major 4x4 poses: the mapper uses the
+  LiDAR pose to place points, and the renderer uses the ego pose to orient and
+  center the model input (they may differ when the LiDAR is offset from the
+  vehicle's ego frame)
+- an optional output buffer to receive the rendered semantic map before
+  normalization
+
+and returns the predicted vector map polylines.
+
+Note: the vendor package needs at least one source file in
+`CUDA-SemVecNet/src/semvecnet/`, otherwise there is no `libsemvecnet_core.so`
+to import.
 
 ## Docker image
 
