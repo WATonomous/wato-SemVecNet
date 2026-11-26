@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Profile a few frames from the middle of a ROS 2 MCAP bag with Nsight Systems.
 #
-#   ./run_nsys_profile.sh [BAG] [--frames N] [--start SECONDS] [--out DIR]
+#   CUDA-SemVecNet/tool/run_nsys_profile.sh [BAG] [--frames N] [--start SECONDS] [--out DIR]
 #
 # Defaults:
 #   BAG    = ~/Desktop/data/bags/may_30_ring_road_test_5
@@ -26,8 +26,8 @@
 # A short summary is also printed to the terminal.
 set -euo pipefail
 
-REPO="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
-PROJECT="$REPO/CUDA-SemVecNet"
+PROJECT="$(cd "$(dirname "$(realpath "$0")")/.." && pwd)"
+REPO="$(dirname "$PROJECT")"
 BAG="${BAG:-$HOME/Desktop/data/bags/may_30_ring_road_test_5}"
 FRAMES="${FRAMES:-10}"
 START="${START:-}"

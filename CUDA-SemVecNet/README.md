@@ -19,6 +19,7 @@ CUDA-SemVecNet/
 ├── tool/
 │   ├── build.sh           configure + build (writes compile_commands.json)
 │   ├── docker_run.sh      run a command in the dev container
+│   ├── run_nsys_profile.sh profile MCAP frames with Nsight Systems
 │   ├── sync_headers.sh    headers for host IntelliSense
 │   ├── export/            HRNet and SemVecNet model export, TensorRT engines
 │   └── eval/              rosbag smoke test, output comparison, profiling report
@@ -62,6 +63,31 @@ Results are written per frame (matching six-digit filename stems) to:
 Use `--frames 0` to process the whole bag, `--out` to pick an output
 directory, or `--help` for all options (including pointing `bag` at a
 different MCAP file or directory).
+
+## Nsight Systems profiling
+
+From the repository root, profile synchronized frames from an MCAP file or a
+folder containing exactly one `.mcap` file:
+
+```bash
+CUDA-SemVecNet/tool/run_nsys_profile.sh /path/to/bag.mcap --frames 10 --start 30 --out /path/to/report
+```
+
+The script builds the CUDA executable, extracts frames, renders their outputs,
+and profiles inference (not bag decoding). It requires Docker with NVIDIA GPU
+support, the `semvecnet-mcap-hrnet:latest` reader image, an inference image
+with Nsight Systems (`semvecnet:dev-ort` by default), and the HRNet plan and
+SemVecNet ONNX model in `CUDA-SemVecNet/models/`, as in the smoke test.
+
+By default it uses `~/Desktop/data/bags/may_30_ring_road_test_5`, profiles 10
+frames starting halfway through the bag, and writes to
+`nsys_reports/<timestamp>-<bag>/` at the repository root. Frame 0 is treated as
+warm-up and excluded from statistics. `--start` is seconds from the bag start;
+use `--help` for image overrides and other options.
+
+Open `report.html` for the summary, inspect `stage_timings.csv` for per-frame
+stage timings, `frames/` for rendered images, and `raw/` for the Nsight timeline
+and detailed statistics.
 
 ## HRNet engine
 
